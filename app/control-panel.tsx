@@ -33,6 +33,7 @@ export function ControlPanel() {
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
+  const [adminKey, setAdminKey] = useState('');
 
   const load = useCallback(async () => {
     try {
@@ -48,6 +49,15 @@ export function ControlPanel() {
   }, []);
 
   useEffect(() => void load(), [load]);
+
+  useEffect(() => {
+    setAdminKey(window.sessionStorage.getItem('ticker-admin-key') || '');
+  }, []);
+
+  function saveAdminKey(value: string) {
+    setAdminKey(value);
+    window.sessionStorage.setItem('ticker-admin-key', value);
+  }
 
   useEffect(() => {
     const modelContext = (document as Document & { modelContext?: ModelContext }).modelContext;
@@ -75,7 +85,7 @@ export function ControlPanel() {
         const selectedPlacement = candidate.placement === 'next' ? 'next' : 'rotation';
         const response = await fetch('/api/custom', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
           body: JSON.stringify({ text: candidate.text.trim(), placement: selectedPlacement }),
         });
         if (!response.ok) throw new Error('The headline could not be added.');
@@ -85,7 +95,7 @@ export function ControlPanel() {
       },
     }, { signal: lifecycle.signal })).catch(() => undefined);
     return () => lifecycle.abort();
-  }, [load]);
+  }, [adminKey, load]);
 
   async function addHeadline(event: FormEvent) {
     event.preventDefault();
@@ -96,7 +106,7 @@ export function ControlPanel() {
     try {
       const response = await fetch('/api/custom', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
         body: JSON.stringify({ text: clean, placement }),
       });
       if (!response.ok) throw new Error('Could not add the headline.');
@@ -114,7 +124,7 @@ export function ControlPanel() {
     setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
     const response = await fetch(`/api/custom/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
       body: JSON.stringify(patch),
     });
     if (!response.ok) {
@@ -125,7 +135,7 @@ export function ControlPanel() {
 
   async function remove(id: number) {
     setItems((current) => current.filter((item) => item.id !== id));
-    const response = await fetch(`/api/custom/${id}`, { method: 'DELETE' });
+    const response = await fetch(`/api/custom/${id}`, { method: 'DELETE', headers: { 'X-Admin-Key': adminKey } });
     if (!response.ok) {
       setError('That headline could not be removed.');
       await load();
@@ -171,6 +181,12 @@ export function ControlPanel() {
 
             {error && <p role="alert" className="mb-4 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</p>}
 
+            <div className="mb-4">
+              <label htmlFor="admin-key" className="mb-2 block text-sm font-medium text-slate-200">Admin key</label>
+              <Input id="admin-key" type="password" value={adminKey} onChange={(event) => saveAdminKey(event.target.value)} placeholder="Enter your private editing key" autoComplete="off" className="h-10 border-white/15 bg-white/5 text-white placeholder:text-slate-600" />
+              <p className="mt-1.5 text-xs text-slate-500">Required only for adding or changing headlines. The OBS ticker does not need it.</p>
+            </div>
+
             <form onSubmit={addHeadline} className="mb-7 rounded-xl border border-white/10 bg-black/20 p-4">
               <label htmlFor="headline" className="mb-2 block text-sm font-medium text-slate-200">New headline</label>
               <Input id="headline" value={headline} maxLength={180} onChange={(event) => setHeadline(event.target.value)} placeholder="Example: $5 starts on every card for the next 10 minutes" className="h-11 border-white/15 bg-white/5 text-white placeholder:text-slate-600" />
@@ -179,7 +195,7 @@ export function ControlPanel() {
                   <Switch checked={placement === 'next'} onCheckedChange={(checked) => setPlacement(checked ? 'next' : 'rotation')} />
                   <Zap className="size-4 text-[#ffb000]" /> Put at the front once
                 </label>
-                <Button type="submit" disabled={saving || !headline.trim()} className="h-10 bg-[#ffb000] px-4 text-black hover:bg-[#ffc13b]">
+                <Button type="submit" disabled={saving || !headline.trim() || !adminKey} className="h-10 bg-[#ffb000] px-4 text-black hover:bg-[#ffc13b]">
                   <Plus /> {saving ? 'Adding…' : 'Add to ticker'}
                 </Button>
               </div>

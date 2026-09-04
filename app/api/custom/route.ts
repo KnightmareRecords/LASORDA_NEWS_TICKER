@@ -1,4 +1,5 @@
 import { env } from 'cloudflare:workers';
+import { isAdmin, unauthorized } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,6 +11,7 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  if (!isAdmin(request)) return unauthorized();
   const body = (await request.json()) as { text?: string; placement?: string };
   const headline = body.text?.trim().slice(0, 180);
   const placement = body.placement === 'next' ? 'next' : 'rotation';

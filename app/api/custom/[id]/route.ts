@@ -1,8 +1,10 @@
 import { env } from 'cloudflare:workers';
+import { isAdmin, unauthorized } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function PATCH(request: Request, context: { params: Promise<{ id: string }> }) {
+  if (!isAdmin(request)) return unauthorized();
   const { id } = await context.params;
   const numericId = Number(id);
   const body = (await request.json()) as { enabled?: boolean; placement?: string };
@@ -17,7 +19,8 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   return Response.json({ ok: true });
 }
 
-export async function DELETE(_request: Request, context: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, context: { params: Promise<{ id: string }> }) {
+  if (!isAdmin(request)) return unauthorized();
   const { id } = await context.params;
   const numericId = Number(id);
   if (!Number.isInteger(numericId)) return Response.json({ error: 'Invalid id.' }, { status: 400 });
