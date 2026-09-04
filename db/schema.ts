@@ -17,5 +17,7 @@ export const tickerSettings = sqliteTable('ticker_settings', {
   textColor: text('text_color').notNull().default('#ffffff'),
   fontFamily: text('font_family').notNull().default('Geist'),
   fontSize: integer('font_size').notNull().default(25),
+  feedUrl: text('feed_url').notNull().default('https://news.google.com/rss/topics/CAAqKggKIiRDQkFTRlFvSUwyMHZNRFp1ZEdvU0JXVnVMVlZUR2dKVlV5Z0FQAQ?hl=en-US&gl=US&ceid=US:en'),
+  feedLabel: text('feed_label').notNull().default('SPORTS'),
   updatedAt: integer('updated_at').notNull().default(0),
 });

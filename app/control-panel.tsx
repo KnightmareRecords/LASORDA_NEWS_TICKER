@@ -21,6 +21,8 @@ type TickerSettings = {
   textColor: string;
   fontFamily: string;
   fontSize: number;
+  feedUrl: string;
+  feedLabel: string;
 };
 
 type InstallPromptEvent = Event & {
@@ -34,6 +36,8 @@ const defaultSettings: TickerSettings = {
   textColor: '#ffffff',
   fontFamily: 'Geist',
   fontSize: 25,
+  feedUrl: 'https://news.google.com/rss/topics/CAAqKggKIiRDQkFTRlFvSUwyMHZNRFp1ZEdvU0JXVnVMVlZUR2dKVlV5Z0FQAQ?hl=en-US&gl=US&ceid=US:en',
+  feedLabel: 'SPORTS',
 };
 
 type ModelContext = {
@@ -226,7 +230,7 @@ export function ControlPanel() {
               <Radio className="size-4" /> Live broadcast tools
             </div>
             <h1 className="text-3xl font-bold tracking-[-0.04em] sm:text-5xl">Ticker control</h1>
-            <p className="mt-3 max-w-2xl text-base text-slate-400">ESPN headlines update automatically. Add your own stream announcements to the same rotation.</p>
+            <p className="mt-3 max-w-2xl text-base text-slate-400">Import any RSS news feed and mix in your own stream announcements.</p>
           </div>
           <div className="flex flex-wrap gap-2">
             {installPrompt && (
@@ -294,6 +298,25 @@ export function ControlPanel() {
           </div>
 
           <aside className="space-y-6">
+            <section className="rounded-2xl border border-white/10 bg-[#101520] p-5">
+              <div className="mb-5 flex items-center gap-2">
+                <Radio className="size-4 text-[#ffb000]" />
+                <h2 className="font-semibold">News feed</h2>
+              </div>
+              <label htmlFor="feed-url" className="text-xs font-medium text-slate-400">
+                RSS or Atom URL
+                <Input id="feed-url" type="url" value={settings.feedUrl} onChange={(event) => setSettings((current) => ({ ...current, feedUrl: event.target.value }))} className="mt-2 h-10 border-white/10 bg-white/5 text-white" />
+              </label>
+              <label htmlFor="feed-label" className="mt-4 block text-xs font-medium text-slate-400">
+                On-screen label
+                <Input id="feed-label" value={settings.feedLabel} maxLength={18} onChange={(event) => setSettings((current) => ({ ...current, feedLabel: event.target.value.toUpperCase() }))} placeholder="SPORTS" className="mt-2 h-10 border-white/10 bg-white/5 text-white" />
+              </label>
+              <p className="mt-3 text-xs leading-5 text-slate-500">Use a direct feed URL beginning with http:// or https://. Changing feeds does not change your custom headlines.</p>
+              <Button disabled={!adminKey || appearanceSaving || !settings.feedUrl.trim()} onClick={saveAppearance} className="mt-4 h-10 w-full bg-[#ffb000] text-black hover:bg-[#ffc13b]">
+                {appearanceSaving ? 'Saving…' : 'Save news feed'}
+              </Button>
+            </section>
+
             <section className="rounded-2xl border border-white/10 bg-[#101520] p-5">
               <div className="mb-5 flex items-center gap-2">
                 <Palette className="size-4 text-[#ffb000]" />

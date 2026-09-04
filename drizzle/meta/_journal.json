@@ -15,6 +15,13 @@
       "when": 1788559542276,
       "tag": "0001_rich_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788559951542,
+      "tag": "0002_nice_arachne",
+      "breakpoints": true
     }
   ]
 }

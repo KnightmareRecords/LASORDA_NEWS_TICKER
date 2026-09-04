@@ -2,13 +2,15 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 
-type Headline = { id: string; text: string; source: 'ESPN' | 'LIVE' };
+type Headline = { id: string; text: string; source: string };
 type TickerSettings = {
   accentColor: string;
   backgroundColor: string;
   textColor: string;
   fontFamily: string;
   fontSize: number;
+  feedUrl: string;
+  feedLabel: string;
 };
 
 const defaultSettings: TickerSettings = {
@@ -17,6 +19,8 @@ const defaultSettings: TickerSettings = {
   textColor: '#ffffff',
   fontFamily: 'Geist',
   fontSize: 25,
+  feedUrl: '',
+  feedLabel: 'SPORTS',
 };
 
 export function Ticker() {

@@ -1,0 +1,2 @@
+ALTER TABLE `ticker_settings` ADD `feed_url` text DEFAULT 'https://news.google.com/rss/topics/CAAqKggKIiRDQkFTRlFvSUwyMHZNRFp1ZEdvU0JXVnVMVlZUR2dKVlV5Z0FQAQ?hl=en-US&gl=US&ceid=US:en' NOT NULL;--> statement-breakpoint
+ALTER TABLE `ticker_settings` ADD `feed_label` text DEFAULT 'SPORTS' NOT NULL;

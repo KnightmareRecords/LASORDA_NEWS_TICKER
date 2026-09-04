@@ -4,7 +4,7 @@ export default function manifest(): MetadataRoute.Manifest {
   return {
     name: 'Live Ticker Control',
     short_name: 'Live Ticker',
-    description: 'Control ESPN and custom headlines for your OBS stream.',
+    description: 'Control RSS and custom headlines for your OBS stream.',
     start_url: '/',
     display: 'standalone',
     background_color: '#080b12',
