@@ -65,6 +65,7 @@ export function ControlPanel() {
   const [adminKey, setAdminKey] = useState('');
   const [settings, setSettings] = useState<TickerSettings>(defaultSettings);
   const [appearanceSaving, setAppearanceSaving] = useState(false);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [previewVersion, setPreviewVersion] = useState(0);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
 
@@ -101,12 +102,16 @@ export function ControlPanel() {
   }, []);
 
   useEffect(() => {
-    setAdminKey(window.sessionStorage.getItem('ticker-admin-key') || '');
+    const savedKey = window.localStorage.getItem('ticker-admin-key') || window.sessionStorage.getItem('ticker-admin-key') || '';
+    setAdminKey(savedKey);
+    if (savedKey) window.localStorage.setItem('ticker-admin-key', savedKey);
   }, []);
 
   function saveAdminKey(value: string) {
     setAdminKey(value);
-    window.sessionStorage.setItem('ticker-admin-key', value);
+    if (value) window.localStorage.setItem('ticker-admin-key', value);
+    else window.localStorage.removeItem('ticker-admin-key');
+    window.sessionStorage.removeItem('ticker-admin-key');
   }
 
   async function saveAppearance() {
@@ -210,11 +215,23 @@ export function ControlPanel() {
   }
 
   async function remove(id: number) {
-    setItems((current) => current.filter((item) => item.id !== id));
-    const response = await fetch(`/api/custom/${id}`, { method: 'DELETE', headers: { 'X-Admin-Key': adminKey } });
-    if (!response.ok) {
-      setError('That headline could not be removed.');
-      await load();
+    if (!adminKey) {
+      setError('Enter your admin key before deleting a headline.');
+      return;
+    }
+    setDeletingId(id);
+    setError('');
+    try {
+      const response = await fetch(`/api/custom/${id}`, { method: 'DELETE', headers: { 'X-Admin-Key': adminKey } });
+      if (!response.ok) {
+        const result = await response.json().catch(() => null) as { error?: string } | null;
+        throw new Error(result?.error || 'That headline could not be removed.');
+      }
+      setItems((current) => current.filter((item) => item.id !== id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That headline could not be removed.');
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -294,7 +311,7 @@ export function ControlPanel() {
                       <Zap className="size-3" /> {item.placement === 'next' ? 'Plays first next refresh' : 'Normal rotation'}
                     </button>
                   </div>
-                  <Button aria-label={`Delete ${item.text}`} size="icon-sm" variant="ghost" className="text-slate-500 hover:bg-red-400/10 hover:text-red-300" onClick={() => remove(item.id)}><Trash2 /></Button>
+                  <Button type="button" aria-label={`Delete ${item.text}`} disabled={deletingId !== null} size="icon-sm" variant="ghost" className="text-slate-500 hover:bg-red-400/10 hover:text-red-300" onClick={() => remove(item.id)}><Trash2 /></Button>
                 </article>
               ))}
             </div>
