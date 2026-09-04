@@ -1,10 +1,11 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { Check, Copy, ExternalLink, Plus, Radio, RefreshCw, Trash2, Zap } from 'lucide-react';
+import { Check, Copy, Download, ExternalLink, Palette, Plus, Radio, RefreshCw, Trash2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 type CustomHeadline = {
   id: number;
@@ -12,6 +13,27 @@ type CustomHeadline = {
   enabled: boolean;
   placement: 'rotation' | 'next';
   createdAt: number;
+};
+
+type TickerSettings = {
+  accentColor: string;
+  backgroundColor: string;
+  textColor: string;
+  fontFamily: string;
+  fontSize: number;
+};
+
+type InstallPromptEvent = Event & {
+  prompt: () => Promise<void>;
+  userChoice: Promise<{ outcome: 'accepted' | 'dismissed' }>;
+};
+
+const defaultSettings: TickerSettings = {
+  accentColor: '#ffb000',
+  backgroundColor: '#0a0e16',
+  textColor: '#ffffff',
+  fontFamily: 'Geist',
+  fontSize: 25,
 };
 
 type ModelContext = {
@@ -34,6 +56,10 @@ export function ControlPanel() {
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState('');
   const [adminKey, setAdminKey] = useState('');
+  const [settings, setSettings] = useState<TickerSettings>(defaultSettings);
+  const [appearanceSaving, setAppearanceSaving] = useState(false);
+  const [previewVersion, setPreviewVersion] = useState(0);
+  const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -51,12 +77,55 @@ export function ControlPanel() {
   useEffect(() => void load(), [load]);
 
   useEffect(() => {
+    void fetch('/api/settings', { cache: 'no-store' })
+      .then((response) => response.json() as Promise<TickerSettings>)
+      .then(setSettings)
+      .catch(() => setError('Could not load ticker appearance.'));
+  }, []);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) void navigator.serviceWorker.register('/sw.js');
+    const capturePrompt = (event: Event) => {
+      event.preventDefault();
+      setInstallPrompt(event as InstallPromptEvent);
+    };
+    window.addEventListener('beforeinstallprompt', capturePrompt);
+    return () => window.removeEventListener('beforeinstallprompt', capturePrompt);
+  }, []);
+
+  useEffect(() => {
     setAdminKey(window.sessionStorage.getItem('ticker-admin-key') || '');
   }, []);
 
   function saveAdminKey(value: string) {
     setAdminKey(value);
     window.sessionStorage.setItem('ticker-admin-key', value);
+  }
+
+  async function saveAppearance() {
+    setAppearanceSaving(true);
+    setError('');
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+        body: JSON.stringify(settings),
+      });
+      if (!response.ok) throw new Error('Could not save appearance. Check your admin key.');
+      setSettings(await response.json() as TickerSettings);
+      setPreviewVersion(Date.now());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong.');
+    } finally {
+      setAppearanceSaving(false);
+    }
+  }
+
+  async function installApp() {
+    if (!installPrompt) return;
+    await installPrompt.prompt();
+    await installPrompt.userChoice;
+    setInstallPrompt(null);
   }
 
   useEffect(() => {
@@ -160,6 +229,11 @@ export function ControlPanel() {
             <p className="mt-3 max-w-2xl text-base text-slate-400">ESPN headlines update automatically. Add your own stream announcements to the same rotation.</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            {installPrompt && (
+              <Button variant="outline" className="border-white/15 bg-white/5 text-white hover:bg-white/10" onClick={installApp}>
+                <Download /> Install app
+              </Button>
+            )}
             <Button variant="outline" className="border-white/15 bg-white/5 text-white hover:bg-white/10" onClick={copyTickerUrl}>
               {copied ? <Check /> : <Copy />} {copied ? 'Copied' : 'Copy OBS URL'}
             </Button>
@@ -220,10 +294,55 @@ export function ControlPanel() {
           </div>
 
           <aside className="space-y-6">
+            <section className="rounded-2xl border border-white/10 bg-[#101520] p-5">
+              <div className="mb-5 flex items-center gap-2">
+                <Palette className="size-4 text-[#ffb000]" />
+                <h2 className="font-semibold">Ticker appearance</h2>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {([
+                  ['accentColor', 'Accent'],
+                  ['backgroundColor', 'Background'],
+                  ['textColor', 'Text'],
+                ] as const).map(([key, label]) => (
+                  <label key={key} className="text-xs font-medium text-slate-400">
+                    {label}
+                    <span className="mt-2 flex h-10 items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-2">
+                      <input type="color" value={settings[key]} onChange={(event) => setSettings((current) => ({ ...current, [key]: event.target.value }))} className="h-6 w-7 cursor-pointer border-0 bg-transparent p-0" />
+                      <span className="hidden font-mono text-[10px] text-slate-500 xl:inline">{settings[key]}</span>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <label className="text-xs font-medium text-slate-400">
+                  Font
+                  <Select value={settings.fontFamily} onValueChange={(value) => setSettings((current) => ({ ...current, fontFamily: value || 'Geist' }))}>
+                    <SelectTrigger className="mt-2 h-10 w-full border-white/10 bg-white/5 text-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {['Geist', 'Arial', 'Impact', 'Georgia', 'Courier New'].map((font) => <SelectItem key={font} value={font}>{font}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </label>
+                <label className="text-xs font-medium text-slate-400">
+                  Text size
+                  <Select value={String(settings.fontSize)} onValueChange={(value) => setSettings((current) => ({ ...current, fontSize: Number(value || 25) }))}>
+                    <SelectTrigger className="mt-2 h-10 w-full border-white/10 bg-white/5 text-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[20, 22, 25, 28, 32, 36].map((size) => <SelectItem key={size} value={String(size)}>{size}px</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </label>
+              </div>
+              <Button disabled={!adminKey || appearanceSaving} onClick={saveAppearance} className="mt-4 h-10 w-full bg-[#ffb000] text-black hover:bg-[#ffc13b]">
+                {appearanceSaving ? 'Saving…' : 'Save appearance'}
+              </Button>
+            </section>
+
             <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#101520]">
               <div className="border-b border-white/10 p-5"><p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Live preview</p></div>
               <div className="relative h-48 bg-[radial-gradient(circle_at_40%_20%,#26364c,#0b1018_60%)]">
-                <iframe title="Ticker preview" src="/ticker?preview=1" className="absolute inset-x-0 bottom-4 h-20 w-full border-0" />
+                <iframe title="Ticker preview" src={`/ticker?preview=${previewVersion}`} className="absolute inset-x-0 bottom-4 h-20 w-full border-0" />
               </div>
             </section>
             <section className="rounded-2xl border border-white/10 bg-[#101520] p-5">
@@ -234,6 +353,10 @@ export function ControlPanel() {
                 <li><span className="mr-2 font-mono text-[#ffb000]">03</span> Position it along the bottom edge.</li>
               </ol>
               <div className="mt-5 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-emerald-200/80">The overlay background is transparent. ESPN refreshes every 30 minutes; custom changes reach OBS within 15 seconds.</div>
+            </section>
+            <section className="rounded-2xl border border-white/10 bg-[#101520] p-5">
+              <h2 className="font-semibold">Install on your computer</h2>
+              <p className="mt-3 text-sm leading-6 text-slate-400">In Chrome or Edge, open the browser menu and choose <strong className="text-slate-200">Install Live Ticker Control</strong>. On a Mac using Safari, choose <strong className="text-slate-200">File → Add to Dock</strong>.</p>
             </section>
           </aside>
         </section>

@@ -1,19 +1,39 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 
 type Headline = { id: string; text: string; source: 'ESPN' | 'LIVE' };
+type TickerSettings = {
+  accentColor: string;
+  backgroundColor: string;
+  textColor: string;
+  fontFamily: string;
+  fontSize: number;
+};
+
+const defaultSettings: TickerSettings = {
+  accentColor: '#ffb000',
+  backgroundColor: '#0a0e16',
+  textColor: '#ffffff',
+  fontFamily: 'Geist',
+  fontSize: 25,
+};
 
 export function Ticker() {
   const [headlines, setHeadlines] = useState<Headline[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [settings, setSettings] = useState<TickerSettings>(defaultSettings);
   const firstLoad = useRef(true);
 
   const load = useCallback(async () => {
     try {
-      const response = await fetch(`/api/headlines${firstLoad.current ? '?consumeNext=1' : ''}`, { cache: 'no-store' });
-      if (!response.ok) throw new Error();
+      const [response, settingsResponse] = await Promise.all([
+        fetch(`/api/headlines${firstLoad.current ? '?consumeNext=1' : ''}`, { cache: 'no-store' }),
+        fetch('/api/settings', { cache: 'no-store' }),
+      ]);
+      if (!response.ok || !settingsResponse.ok) throw new Error();
       const data = (await response.json()) as { headlines: Headline[] };
+      setSettings(await settingsResponse.json() as TickerSettings);
       if (data.headlines.length) setHeadlines(data.headlines);
       setStatus('ready');
       firstLoad.current = false;
@@ -42,7 +62,17 @@ export function Ticker() {
   ));
 
   return (
-    <main className="ticker-shell" aria-label="Live sports headlines">
+    <main
+      className="ticker-shell"
+      aria-label="Live sports headlines"
+      style={{
+        '--ticker-accent': settings.accentColor,
+        '--ticker-background': settings.backgroundColor,
+        '--ticker-text': settings.textColor,
+        '--ticker-font': settings.fontFamily === 'Geist' ? 'var(--font-geist-sans)' : settings.fontFamily,
+        '--ticker-size': `${settings.fontSize}px`,
+      } as CSSProperties}
+    >
       <div className="ticker-badge"><span className="live-dot" /> LIVE WIRE</div>
       <div className="ticker-window">
         <div className="ticker-track">
