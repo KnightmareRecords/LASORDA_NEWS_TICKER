@@ -91,7 +91,7 @@ button, input { font: inherit; }
   clip-path: polygon(0 0, 100% 0, calc(100% - 23px) 100%, 0 100%);
 }
 .live-dot { width: 9px; height: 9px; border-radius: 50%; background: #d0002a; box-shadow: 0 0 0 5px rgb(208 0 42 / 14%); }
-.ticker-window { min-width: 0; flex: 1; overflow: hidden; background: color-mix(in srgb, var(--ticker-background, #0a0e16) 97%, transparent); border-block: 1px solid rgb(255 255 255 / 10%); }
+.ticker-window { position: relative; z-index: 1; min-width: 0; flex: 1; margin-left: -23px; padding-left: 23px; overflow: hidden; background: color-mix(in srgb, var(--ticker-background, #0a0e16) 97%, transparent); border-block: 1px solid rgb(255 255 255 / 10%); }
 .ticker-track { display: flex; width: max-content; height: 100%; animation: ticker-scroll 140s linear infinite; will-change: transform; }
 .ticker-group { display: flex; align-items: center; flex-shrink: 0; }
 .ticker-item { display: inline-flex; align-items: center; gap: 16px; padding-left: 28px; white-space: nowrap; font-size: var(--ticker-size, 25px); font-weight: 650; letter-spacing: -.02em; }
