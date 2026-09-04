@@ -1,0 +1,1 @@
+ALTER TABLE `ticker_settings` ADD `scroll_speed` integer DEFAULT 90 NOT NULL;

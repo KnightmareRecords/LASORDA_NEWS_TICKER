@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Slider } from '@/components/ui/slider';
 
 type CustomHeadline = {
   id: number;
@@ -21,6 +22,7 @@ type TickerSettings = {
   textColor: string;
   fontFamily: string;
   fontSize: number;
+  scrollSpeed: number;
   feedUrl: string;
   feedLabel: string;
 };
@@ -36,6 +38,7 @@ const defaultSettings: TickerSettings = {
   textColor: '#ffffff',
   fontFamily: 'Geist',
   fontSize: 25,
+  scrollSpeed: 90,
   feedUrl: 'https://news.google.com/rss/topics/CAAqKggKIiRDQkFTRlFvSUwyMHZNRFp1ZEdvU0JXVnVMVlZUR2dKVlV5Z0FQAQ?hl=en-US&gl=US&ceid=US:en',
   feedLabel: 'SPORTS',
 };
@@ -356,6 +359,23 @@ export function ControlPanel() {
                     </SelectContent>
                   </Select>
                 </label>
+              </div>
+              <div className="mt-5">
+                <div className="flex items-center justify-between gap-3">
+                  <label htmlFor="scroll-speed" className="text-xs font-medium text-slate-400">Scroll speed</label>
+                  <span className="font-mono text-xs text-[#ffb000]">{settings.scrollSpeed} px/s</span>
+                </div>
+                <Slider
+                  id="scroll-speed"
+                  aria-label="Ticker scroll speed"
+                  min={30}
+                  max={180}
+                  step={10}
+                  value={[settings.scrollSpeed]}
+                  onValueChange={(value) => setSettings((current) => ({ ...current, scrollSpeed: Array.isArray(value) ? value[0] : value }))}
+                  className="mt-4"
+                />
+                <div className="mt-2 flex justify-between text-xs text-slate-500"><span>Slower</span><span>Faster</span></div>
               </div>
               <Button disabled={!adminKey || appearanceSaving} onClick={saveAppearance} className="mt-4 h-10 w-full bg-[#ffb000] text-black hover:bg-[#ffc13b]">
                 {appearanceSaving ? 'Saving…' : 'Save appearance'}

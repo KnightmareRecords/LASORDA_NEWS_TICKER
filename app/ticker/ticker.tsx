@@ -9,6 +9,7 @@ type TickerSettings = {
   textColor: string;
   fontFamily: string;
   fontSize: number;
+  scrollSpeed: number;
   feedUrl: string;
   feedLabel: string;
 };
@@ -19,6 +20,7 @@ const defaultSettings: TickerSettings = {
   textColor: '#ffffff',
   fontFamily: 'Geist',
   fontSize: 25,
+  scrollSpeed: 90,
   feedUrl: '',
   feedLabel: 'SPORTS',
 };
@@ -27,7 +29,9 @@ export function Ticker() {
   const [headlines, setHeadlines] = useState<Headline[]>([]);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [settings, setSettings] = useState<TickerSettings>(defaultSettings);
+  const [scrollDuration, setScrollDuration] = useState(140);
   const firstLoad = useRef(true);
+  const groupRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     try {
@@ -52,6 +56,16 @@ export function Ticker() {
     return () => window.clearInterval(timer);
   }, [load]);
 
+  useEffect(() => {
+    const group = groupRef.current;
+    if (!group) return;
+    const measure = () => setScrollDuration(Math.max(group.scrollWidth / settings.scrollSpeed, 8));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(group);
+    return () => observer.disconnect();
+  }, [headlines, settings.scrollSpeed]);
+
   if (status === 'loading') return null;
   if (status === 'error' || headlines.length === 0) {
     return <div className="ticker-shell"><div className="ticker-badge">LIVE</div><div className="ticker-empty">HEADLINES TEMPORARILY UNAVAILABLE</div></div>;
@@ -75,12 +89,13 @@ export function Ticker() {
         '--ticker-text': settings.textColor,
         '--ticker-font': settings.fontFamily === 'Geist' ? 'var(--font-geist-sans)' : settings.fontFamily,
         '--ticker-size': `${settings.fontSize}px`,
+        '--ticker-duration': `${scrollDuration}s`,
       } as CSSProperties}
     >
       <div className="ticker-badge"><span className="live-dot" /> LIVE WIRE</div>
       <div className="ticker-window">
         <div className="ticker-track">
-          <div className="ticker-group">{strip}</div>
+          <div ref={groupRef} className="ticker-group">{strip}</div>
           <div className="ticker-group" aria-hidden="true">{strip}</div>
         </div>
       </div>
