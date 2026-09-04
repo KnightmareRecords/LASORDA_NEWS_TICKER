@@ -1,0 +1,110 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-sm: calc(var(--radius) * .6);
+  --radius-md: calc(var(--radius) * .8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+}
+
+:root {
+  --background: oklch(0.12 0.015 260);
+  --foreground: oklch(0.98 0 0);
+  --card: oklch(0.17 0.02 260);
+  --card-foreground: oklch(0.98 0 0);
+  --popover: oklch(0.17 0.02 260);
+  --popover-foreground: oklch(0.98 0 0);
+  --primary: oklch(0.8 0.17 78);
+  --primary-foreground: oklch(0.12 0.015 260);
+  --secondary: oklch(0.24 0.02 260);
+  --secondary-foreground: oklch(0.96 0 0);
+  --muted: oklch(0.24 0.02 260);
+  --muted-foreground: oklch(0.7 0.02 260);
+  --accent: oklch(0.8 0.17 78);
+  --accent-foreground: oklch(0.12 0.015 260);
+  --destructive: oklch(0.66 0.22 25);
+  --border: oklch(1 0 0 / 12%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.8 0.17 78);
+  --radius: .75rem;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; min-height: 100%; }
+body { font-family: var(--font-geist-sans), Arial, sans-serif; }
+button, input { font: inherit; }
+
+@keyframes ticker-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+.ticker-shell {
+  position: fixed;
+  inset: auto 0 0;
+  height: 84px;
+  display: flex;
+  overflow: hidden;
+  background: transparent;
+  color: #fff;
+  filter: drop-shadow(0 7px 12px rgb(0 0 0 / 32%));
+}
+.ticker-badge {
+  position: relative;
+  z-index: 2;
+  width: 196px;
+  flex: 0 0 196px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #ffb000;
+  color: #090c12;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: .08em;
+  clip-path: polygon(0 0, 100% 0, calc(100% - 23px) 100%, 0 100%);
+}
+.live-dot { width: 9px; height: 9px; border-radius: 50%; background: #d0002a; box-shadow: 0 0 0 5px rgb(208 0 42 / 14%); }
+.ticker-window { min-width: 0; flex: 1; overflow: hidden; background: linear-gradient(90deg, rgb(10 14 22 / 97%), rgb(18 25 37 / 97%)); border-block: 1px solid rgb(255 255 255 / 10%); }
+.ticker-track { display: flex; width: max-content; height: 100%; animation: ticker-scroll 140s linear infinite; will-change: transform; }
+.ticker-group { display: flex; align-items: center; flex-shrink: 0; }
+.ticker-item { display: inline-flex; align-items: center; gap: 16px; padding-left: 28px; white-space: nowrap; font-size: 25px; font-weight: 650; letter-spacing: -.02em; }
+.ticker-item strong { color: #ffb000; font-size: 13px; letter-spacing: .14em; }
+.ticker-item strong.source-live { border-radius: 4px; background: #ffb000; color: #090c12; padding: 5px 7px; }
+.ticker-item i { width: 5px; height: 5px; margin-left: 14px; border-radius: 50%; background: #607087; }
+.ticker-empty { display: flex; flex: 1; align-items: center; background: rgb(10 14 22 / 97%); padding-left: 30px; font-weight: 700; letter-spacing: .08em; color: #96a1b2; }
+
+@media (max-width: 700px) {
+  .ticker-shell { height: 70px; }
+  .ticker-badge { width: 145px; flex-basis: 145px; font-size: 14px; }
+  .ticker-item { font-size: 20px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ticker-track { animation-duration: 240s; }
+}
