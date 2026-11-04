@@ -1,18 +1,20 @@
 {
-  // Cloudflare Workers config for the LASORDA News Ticker.
-  // Setup on a new Cloudflare account: see "Hosting" in CLAUDE.md.
-  "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "lasorda-news-ticker",
-  "main": "vinext/server/fetch-handler",
-  "compatibility_date": "2026-05-01",
-  "compatibility_flags": ["nodejs_compat"],
-  "d1_databases": [
-    {
-      "binding": "DB",
-      "database_name": "lasorda-ticker-db",
-      // Replace with the id printed by `npx wrangler d1 create lasorda-ticker-db`.
-      "database_id": "00000000-0000-4000-8000-000000000000",
-      "migrations_dir": "drizzle"
-    }
-  ]
+	// Cloudflare Workers config for the LASORDA News Ticker.
+	// Setup on a new Cloudflare account: see "Hosting" in CLAUDE.md.
+	"$schema": "node_modules/wrangler/config-schema.json",
+	"name": "lasorda-news-ticker",
+	"main": "vinext/server/fetch-handler",
+	"compatibility_date": "2026-05-01",
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "lasorda-ticker-db",
+			// Jay's Cloudflare D1 database (created by scripts/setup-cloudflare.mjs).
+			"database_id": "e7bc5cc0-4b7f-4a50-b651-1e9171e6ed8a",
+			"migrations_dir": "drizzle"
+		}
+	]
 }
