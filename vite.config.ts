@@ -18,6 +18,9 @@ export default defineConfig(async () => {
       cloudflare({
         viteEnvironment: { name: 'rsc', childEnvironments: ['ssr'] },
         configPath: './wrangler.jsonc',
+        // Workers AI only runs on Cloudflare. Local dev skips it (stories air as plain text) so
+        // `npm run dev` works without a Cloudflare login; set TICKER_REMOTE_AI=1 to use the real AI locally.
+        remoteBindings: process.env.TICKER_REMOTE_AI === '1',
       }),
     ],
   };

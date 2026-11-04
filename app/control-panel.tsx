@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { Check, Copy, Download, ExternalLink, MonitorPlay, Palette, Plus, Radio, RefreshCw, Trash2, Zap } from 'lucide-react';
+import { Check, Copy, Download, ExternalLink, MonitorPlay, Palette, Plus, Radio, RefreshCw, Sparkles, Trash2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -42,7 +42,10 @@ type TickerSettings = {
   scrollSpeed: number;
   feedUrl: string;
   feedLabel: string;
+  aiSummaries: boolean;
 };
+
+type AiStats = { off?: boolean; available?: boolean; ok?: number; rejected?: number; waiting?: number; error?: string | null };
 
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -58,6 +61,7 @@ const defaultSettings: TickerSettings = {
   scrollSpeed: 90,
   feedUrl: 'https://www.espn.com/espn/rss/news',
   feedLabel: 'SPORTS',
+  aiSummaries: true,
 };
 
 type ModelContext = {
@@ -91,7 +95,7 @@ export function ControlPanel() {
   const [appearanceSaving, setAppearanceSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [savedSettings, setSavedSettings] = useState<TickerSettings>(defaultSettings);
-  const [feedStatus, setFeedStatus] = useState<{ ok: boolean; stale: boolean; ageMinutes: number; count: number; error: string | null } | null>(null);
+  const [feedStatus, setFeedStatus] = useState<{ ok: boolean; stale: boolean; ageMinutes: number; count: number; error: string | null; ai: AiStats | null } | null>(null);
   const previewRef = useRef<HTMLIFrameElement>(null);
   const settingsRef = useRef(settings);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
@@ -102,13 +106,14 @@ export function ControlPanel() {
   const checkFeed = useCallback(async () => {
     try {
       const response = await fetch('/api/headlines', { cache: 'no-store' });
-      const data = (await response.json()) as { headlines: { source: string }[]; feedAvailable: boolean; feedError?: string | null; feedStale?: boolean; feedAgeSeconds?: number };
+      const data = (await response.json()) as { headlines: { source: string }[]; feedAvailable: boolean; feedError?: string | null; feedStale?: boolean; feedAgeSeconds?: number; ai?: AiStats };
       setFeedStatus({
         ok: data.feedAvailable,
         stale: Boolean(data.feedStale),
         ageMinutes: Math.max(1, Math.round((data.feedAgeSeconds ?? 0) / 60)),
         count: data.headlines.filter((item) => item.source !== 'LIVE').length,
         error: data.feedError ?? null,
+        ai: data.ai ?? null,
       });
     } catch {
       setFeedStatus(null);
@@ -450,6 +455,22 @@ export function ControlPanel() {
               ) : (
                 <p role="alert" className="mt-3 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-xs leading-5 text-red-200">Feed not loading: {feedStatus.error || 'unknown error'} Only your custom headlines are showing.</p>
               ))}
+              <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-3">
+                <label className="flex cursor-pointer items-center justify-between gap-3 text-sm font-medium text-slate-200">
+                  <span className="flex items-center gap-2"><Sparkles className="size-4 text-[#ffb000]" /> AI short lines</span>
+                  <Switch checked={settings.aiSummaries} onCheckedChange={(checked) => setSettings((current) => ({ ...current, aiSummaries: checked }))} />
+                </label>
+                <p className="mt-1.5 text-xs leading-5 text-slate-500">Rewrites each story into one short line. Lines with any number or name that isn’t in the original story are thrown out and the original text airs instead. Turn off and save to air ESPN’s text as-is.</p>
+                {settings.aiSummaries && feedStatus?.ai && !feedStatus.ai.off && (
+                  <p className="mt-2 text-xs leading-5 text-slate-300">
+                    {feedStatus.ai.available === false
+                      ? 'AI isn’t connected on this server yet — publish with DEPLOY.cmd.'
+                      : feedStatus.ai.error
+                        ? `AI paused for a few minutes (${feedStatus.ai.error}) — original text is airing.`
+                        : `${feedStatus.ai.ok ?? 0} AI lines · ${feedStatus.ai.rejected ?? 0} kept original (failed safety check) · ${feedStatus.ai.waiting ?? 0} still being written`}
+                  </p>
+                )}
+              </div>
               <p className="mt-3 text-xs leading-5 text-slate-500">Use a direct feed URL beginning with http:// or https://. Changing feeds does not change your custom headlines.</p>
               <Button disabled={!adminKey || appearanceSaving || !settings.feedUrl.trim()} onClick={saveAppearance} className="mt-4 h-10 w-full bg-[#ffb000] text-black hover:bg-[#ffc13b]">
                 {appearanceSaving ? 'Saving…' : 'Save news feed'}

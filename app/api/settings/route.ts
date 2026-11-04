@@ -12,6 +12,7 @@ const defaults = {
   scrollSpeed: 90,
   feedUrl: 'https://www.espn.com/espn/rss/news',
   feedLabel: 'SPORTS',
+  aiSummaries: true,
 };
 
 const fonts = ['Geist', 'Arial', 'Impact', 'Georgia', 'Courier New'];
@@ -39,9 +40,9 @@ const isSafeFeedUrl = (value: unknown): value is string => {
 
 export async function GET() {
   const row = await env.DB.prepare(
-    'SELECT accent_color AS accentColor, background_color AS backgroundColor, text_color AS textColor, font_family AS fontFamily, font_size AS fontSize, scroll_speed AS scrollSpeed, feed_url AS feedUrl, feed_label AS feedLabel FROM ticker_settings WHERE id = 1',
-  ).first();
-  return Response.json(row || defaults, { headers: { 'Cache-Control': 'no-store' } });
+    'SELECT accent_color AS accentColor, background_color AS backgroundColor, text_color AS textColor, font_family AS fontFamily, font_size AS fontSize, scroll_speed AS scrollSpeed, feed_url AS feedUrl, feed_label AS feedLabel, ai_summaries AS aiSummaries FROM ticker_settings WHERE id = 1',
+  ).first<Record<string, unknown>>();
+  return Response.json(row ? { ...row, aiSummaries: row.aiSummaries !== 0 } : defaults, { headers: { 'Cache-Control': 'no-store' } });
 }
 
 export async function PATCH(request: Request) {
@@ -59,13 +60,14 @@ export async function PATCH(request: Request) {
     scrollSpeed: typeof body.scrollSpeed === 'number' && body.scrollSpeed >= 30 && body.scrollSpeed <= 180 ? Math.round(body.scrollSpeed) : defaults.scrollSpeed,
     feedUrl: body.feedUrl,
     feedLabel: typeof body.feedLabel === 'string' && body.feedLabel.trim() ? body.feedLabel.trim().slice(0, 18).toUpperCase() : defaults.feedLabel,
+    aiSummaries: typeof body.aiSummaries === 'boolean' ? body.aiSummaries : defaults.aiSummaries,
   };
   await env.DB.prepare(
-    `INSERT INTO ticker_settings (id, accent_color, background_color, text_color, font_family, font_size, scroll_speed, feed_url, feed_label, updated_at)
-     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO ticker_settings (id, accent_color, background_color, text_color, font_family, font_size, scroll_speed, feed_url, feed_label, ai_summaries, updated_at)
+     VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(id) DO UPDATE SET accent_color = excluded.accent_color, background_color = excluded.background_color,
        text_color = excluded.text_color, font_family = excluded.font_family, font_size = excluded.font_size,
-       scroll_speed = excluded.scroll_speed, feed_url = excluded.feed_url, feed_label = excluded.feed_label, updated_at = excluded.updated_at`,
-  ).bind(settings.accentColor, settings.backgroundColor, settings.textColor, settings.fontFamily, settings.fontSize, settings.scrollSpeed, settings.feedUrl, settings.feedLabel, Date.now()).run();
+       scroll_speed = excluded.scroll_speed, feed_url = excluded.feed_url, feed_label = excluded.feed_label, ai_summaries = excluded.ai_summaries, updated_at = excluded.updated_at`,
+  ).bind(settings.accentColor, settings.backgroundColor, settings.textColor, settings.fontFamily, settings.fontSize, settings.scrollSpeed, settings.feedUrl, settings.feedLabel, settings.aiSummaries ? 1 : 0, Date.now()).run();
   return Response.json(settings);
 }

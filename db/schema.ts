@@ -24,5 +24,18 @@ export const tickerSettings = sqliteTable('ticker_settings', {
   scrollSpeed: integer('scroll_speed').notNull().default(90),
   feedUrl: text('feed_url').notNull().default('https://news.google.com/rss/topics/CAAqKggKIiRDQkFTRlFvSUwyMHZNRFp1ZEdvU0JXVnVMVlZUR2dKVlV5Z0FQAQ?hl=en-US&gl=US&ceid=US:en'),
   feedLabel: text('feed_label').notNull().default('SPORTS'),
+  /** Rewrite feed stories into short ticker lines with Cloudflare Workers AI (1 = on). */
+  aiSummaries: integer('ai_summaries', { mode: 'boolean' }).notNull().default(true),
   updatedAt: integer('updated_at').notNull().default(0),
+});
+
+/** One AI ticker line per feed story (keyed by story id + text hash), so each story is summarized once. */
+export const aiLines = sqliteTable('ai_lines', {
+  storyKey: text('story_key').primaryKey(),
+  /** 'ok' = line passed the safety checks; 'rejected' = failed them (the plain text airs instead). */
+  status: text('status', { enum: ['ok', 'rejected'] }).notNull(),
+  line: text('line'),
+  team: text('team'),
+  reason: text('reason'),
+  createdAt: integer('created_at').notNull(),
 });

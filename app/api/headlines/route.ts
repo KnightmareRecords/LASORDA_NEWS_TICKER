@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { detectTeam } from '@/lib/teams';
+import { summarizeStory } from '@/lib/ai-summary';
 
 export const dynamic = 'force-dynamic';
 const DEFAULT_FEED = 'https://www.espn.com/espn/rss/news';
@@ -10,7 +11,7 @@ const MAX_ITEM_LENGTH = 170;
 
 type Headline = { id: string; text: string; source: string; team: string | null; tag: string | null };
 type CustomRow = { id: number; text: string; placement: 'rotation' | 'next'; team: string | null; tag: string | null };
-type FeedSettings = { feedUrl: string; feedLabel: string };
+type FeedSettings = { feedUrl: string; feedLabel: string; aiSummaries: number | null };
 
 function decodeXml(value: string) {
   return value
@@ -52,12 +53,13 @@ function shorten(fullText: string) {
 // Prefer the story summary (it carries the facts — scores, stats, decisions); headlines are often
 // click teasers. Fall back to the headline when the feed has no usable summary (e.g. Google News,
 // whose description is just links).
-function pickText(title: string, summary: string) {
+function pickStory(title: string, summary: string) {
   const usable = summary.length >= 40 && !/https?:\/\//i.test(summary) && !summary.startsWith(title);
-  return shorten(usable ? summary : title);
+  return usable ? summary : title;
 }
 
-type FeedItem = { id: string; text: string };
+/** `story` is the full story text (for AI); `text` is the trimmed version that airs without AI. */
+type FeedItem = { id: string; text: string; story: string };
 type CachedFeed = { items: FeedItem[]; fetchedAt: number; lastFailureAt: number; lastError: string | null };
 
 // Feed sites (Google News especially) rate-limit frequent requests. Every OBS ticker and control
@@ -138,9 +140,88 @@ async function getFeedHeadlines(feedUrl: string): Promise<FeedItem[]> {
       const title = match[1].match(/<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i)?.[1] ?? '';
       const summary = match[1].match(/<(description|summary)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/i)?.[2] ?? '';
       const guid = match[1].match(/<(?:guid|id)(?:\s[^>]*)?>([\s\S]*?)<\/(?:guid|id)>/i)?.[1] ?? `feed-${index}`;
-      return { id: decodeXml(guid), text: pickText(decodeXml(title), decodeXml(summary)) };
+      const story = pickStory(decodeXml(title), decodeXml(summary));
+      return { id: decodeXml(guid), text: shorten(story), story };
     })
     .filter((item) => item.text);
+}
+
+// ---------- AI ticker lines ----------
+// Each new story is rewritten once by Workers AI (lib/ai-summary.ts) and saved in D1 (ai_lines).
+// Only a few new stories are summarized per request so the ticker never waits long; the rest
+// air as plain text until their turn. If the AI service errors (e.g. daily free limit), it pauses
+// for a few minutes and everything airs as plain text.
+const AI_PER_REQUEST = 3;
+const AI_TIMEOUT_MS = 8000;
+const AI_PAUSE_AFTER_ERROR_MS = 5 * 60_000;
+const AI_KEEP_DAYS = 3;
+type AiEntry = { status: 'ok' | 'rejected'; line: string | null; team: string | null };
+const aiMemory = new Map<string, AiEntry>();
+const aiInFlight = new Set<string>();
+let aiPausedUntil = 0;
+let aiLastError: string | null = null;
+
+function storyKey(item: FeedItem) {
+  let hash = 0x811c9dc5;
+  for (let index = 0; index < item.story.length; index++) hash = Math.imul(hash ^ item.story.charCodeAt(index), 0x01000193);
+  return `${item.id}#${(hash >>> 0).toString(16)}`;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number) {
+  return Promise.race([promise, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('The AI service took too long.')), ms))]);
+}
+
+async function getAiLines(items: FeedItem[]) {
+  const keys = items.map(storyKey);
+  const unknown = keys.filter((key) => !aiMemory.has(key));
+  if (unknown.length) {
+    const placeholders = unknown.map(() => '?').join(',');
+    const rows = await env.DB.prepare(`SELECT story_key AS storyKey, status, line, team FROM ai_lines WHERE story_key IN (${placeholders})`)
+      .bind(...unknown)
+      .all<AiEntry & { storyKey: string }>();
+    for (const row of rows.results) aiMemory.set(row.storyKey, { status: row.status, line: row.line, team: row.team });
+  }
+
+  const todo = items.filter((item, index) => !aiMemory.has(keys[index]) && !aiInFlight.has(keys[index])).slice(0, AI_PER_REQUEST);
+  if (todo.length && env.AI && Date.now() >= aiPausedUntil) {
+    const ai = env.AI;
+    await Promise.all(todo.map(async (item) => {
+      const key = storyKey(item);
+      aiInFlight.add(key);
+      try {
+        const outcome = await withTimeout(summarizeStory(ai as never, item.story), AI_TIMEOUT_MS);
+        const entry: AiEntry = outcome.status === 'ok'
+          ? { status: 'ok', line: outcome.result.line, team: outcome.result.team }
+          : { status: 'rejected', line: null, team: null };
+        aiMemory.set(key, entry);
+        aiLastError = null;
+        await env.DB.prepare('INSERT OR REPLACE INTO ai_lines (story_key, status, line, team, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)')
+          .bind(key, entry.status, entry.line, entry.team, outcome.status === 'rejected' ? outcome.reason : null, Date.now())
+          .run();
+      } catch (error) {
+        aiLastError = error instanceof Error ? error.message : 'The AI service failed.';
+        aiPausedUntil = Date.now() + AI_PAUSE_AFTER_ERROR_MS;
+        console.error('AI summary failed', error);
+      } finally {
+        aiInFlight.delete(key);
+      }
+    }));
+    if (Math.random() < 0.05) {
+      await env.DB.prepare('DELETE FROM ai_lines WHERE created_at < ?').bind(Date.now() - AI_KEEP_DAYS * 86_400_000).run();
+    }
+  }
+
+  const lines = new Map<string, AiEntry>();
+  items.forEach((item, index) => {
+    const entry = aiMemory.get(keys[index]);
+    if (entry) lines.set(item.id, entry);
+  });
+  const ok = [...lines.values()].filter((entry) => entry.status === 'ok').length;
+  const rejected = [...lines.values()].filter((entry) => entry.status === 'rejected').length;
+  return {
+    lines,
+    stats: { available: Boolean(env.AI), ok, rejected, waiting: items.length - ok - rejected, error: Date.now() < aiPausedUntil ? aiLastError : null },
+  };
 }
 
 export async function GET(request: Request) {
@@ -150,14 +231,28 @@ export async function GET(request: Request) {
   ).all<CustomRow>();
   const custom = customResult.results;
   const feedSettings = await env.DB.prepare(
-    'SELECT feed_url AS feedUrl, feed_label AS feedLabel FROM ticker_settings WHERE id = 1',
+    'SELECT feed_url AS feedUrl, feed_label AS feedLabel, ai_summaries AS aiSummaries FROM ticker_settings WHERE id = 1',
   ).first<FeedSettings>();
   const feedUrl = feedSettings?.feedUrl || DEFAULT_FEED;
   const feedLabel = feedSettings?.feedLabel || 'SPORTS';
 
   const result = await getCachedFeed(feedUrl);
-  // Feed stories get the team panel of the first team they mention.
-  const feed: Headline[] = result.items.map((item) => ({ ...item, source: feedLabel, team: detectTeam(item.text)?.key ?? null, tag: null }));
+  const aiEnabled = feedSettings?.aiSummaries !== 0;
+  const ai = aiEnabled && result.items.length ? await getAiLines(result.items) : null;
+
+  // AI line + AI-picked team when it passed the safety checks; otherwise the trimmed story text,
+  // with the team panel of the first team the story mentions.
+  const feed: Headline[] = result.items.map((item) => {
+    const entry = ai?.lines.get(item.id);
+    const useAi = entry?.status === 'ok' && entry.line;
+    return {
+      id: item.id,
+      text: useAi ? entry.line! : item.text,
+      source: feedLabel,
+      team: (useAi && entry.team) || detectTeam(item.story)?.key || null,
+      tag: null,
+    };
+  });
   const feedAvailable = feed.length > 0;
   const feedError = result.error;
   // True when we're showing saved headlines because the feed site refused the latest request.
@@ -180,5 +275,5 @@ export async function GET(request: Request) {
     await env.DB.prepare(`UPDATE custom_headlines SET placement = 'rotation' WHERE id IN (${placeholders})`).bind(...ids).run();
   }
 
-  return Response.json({ headlines: mixed, feedAvailable, feedError, feedStale, feedAgeSeconds, feedUrl, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ headlines: mixed, feedAvailable, feedError, feedStale, feedAgeSeconds, feedUrl, ai: ai?.stats ?? { off: true }, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
 }
