@@ -46,11 +46,12 @@ Note: `compatibility_date` must not be newer than what the installed wrangler su
 - `live-ticker-control*.tar.gz` are local-only snapshot archives on the home PC; gitignored.
 
 ## Status / open decisions
-- Hosting: LIVE on Jay's Cloudflare (subdomain `newsticker`): control panel https://lasorda-news-ticker.newsticker.workers.dev, OBS source `/ticker`. Publish updates with `DEPLOY.cmd` (Windows) / `npm run deploy`; first-time setup with `SETUP CLOUDFLARE.cmd` / `node scripts/setup-cloudflare.mjs`. Deploys run on Jay's computer. Old ChatGPT Sites data abandoned.
+- Hosting: LIVE on Jay's Cloudflare (subdomain `newsticker`): control panel https://lasorda-news-ticker.newsticker.workers.dev, OBS source `/ticker`. Publish updates with `DEPLOY.cmd` (Windows) / `npm run deploy`; change the admin password with `SET PASSWORD.cmd` (no deploy needed); first-time setup with `SETUP CLOUDFLARE.cmd` / `node scripts/setup-cloudflare.mjs`. Deploys run on Jay's computer. Old ChatGPT Sites data abandoned.
 - Google News feed failed on first Cloudflare deploy; 2bacf36 adds browser headers, 8s timeout and a feed-status message in the control panel — check it after deploying; switch feeds if Google keeps refusing.
 - Next feature work: not chosen yet — ask Jay.
 
 ## Change log
+- 2026-11-04: Admin key errors now say why (wrong key vs no password set on server); key compared trimmed; added SET PASSWORD.cmd.
 - 2026-11-04: Site live on Cloudflare (newsticker.workers.dev); added SETUP CLOUDFLARE.cmd, DEPLOY.cmd, feed error reporting + timeout.
 - 2026-11-04: Removed all ChatGPT/OpenAI Sites tooling (`@openai/sites-vite-plugin`, `.openai/`, `wrangler.local.jsonc`, `sites-origin` remote); added `wrangler.jsonc` + deploy/migrate scripts for Jay's own Cloudflare; admin key `local` now only works on localhost.
 - 2026-11-04: Working live preview: control panel preview updates instantly with unsaved appearance changes, no longer eats "play next" headlines, shown as a scaled 1080p stream frame; Arial/sans fallback for the ticker font.

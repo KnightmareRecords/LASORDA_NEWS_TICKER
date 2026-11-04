@@ -54,6 +54,11 @@ type ModelContext = {
   }, options?: { signal?: AbortSignal }) => void | Promise<void>;
 };
 
+async function errorFrom(response: Response, fallback: string) {
+  const body = await response.json().catch(() => null) as { error?: string } | null;
+  return body?.error || fallback;
+}
+
 export function ControlPanel() {
   const [items, setItems] = useState<CustomHeadline[]>([]);
   const [headline, setHeadline] = useState('');
@@ -163,7 +168,7 @@ export function ControlPanel() {
         headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
         body: JSON.stringify(settings),
       });
-      if (!response.ok) throw new Error('Could not save appearance. Check your admin key.');
+      if (!response.ok) throw new Error(await errorFrom(response, 'Could not save appearance.'));
       const saved = await response.json() as TickerSettings;
       setSettings(saved);
       setSavedSettings(saved);
@@ -233,7 +238,7 @@ export function ControlPanel() {
         headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
         body: JSON.stringify({ text: clean, placement }),
       });
-      if (!response.ok) throw new Error('Could not add the headline.');
+      if (!response.ok) throw new Error(await errorFrom(response, 'Could not add the headline.'));
       setHeadline('');
       setPlacement('rotation');
       await load();
@@ -252,7 +257,7 @@ export function ControlPanel() {
       body: JSON.stringify(patch),
     });
     if (!response.ok) {
-      setError('That change did not save.');
+      setError(await errorFrom(response, 'That change did not save.'));
       await load();
     } else {
       refreshPreview();
