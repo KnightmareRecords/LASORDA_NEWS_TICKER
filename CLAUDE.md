@@ -9,7 +9,7 @@ Owner: Jay. Works on this from two computers (home + office), one at a time.
 4. Keep this file current: update "Status" and "Change log" below when something meaningful changes, and push it.
 
 ## What it is
-Two-page web app, currently hosted on OpenAI ChatGPT Sites (Cloudflare Workers + D1 SQLite under the hood). Originally built with OpenAI Codex.
+Two-page web app on Cloudflare Workers + D1 (SQLite). Jay wants **no ChatGPT/OpenAI involvement** — all OpenAI Sites tooling was removed on 2026-11-04; don't reintroduce it.
 - `/` — **Control panel** (`app/control-panel.tsx`): add / enable / delete custom headlines ("rotation" or "play next"), RSS feed URL + label, colors, font, font size, scroll speed, OBS setup info, installable as an app (PWA, `public/sw.js`, `app/manifest.ts`).
 - `/ticker` — **The ticker** (`app/ticker/ticker.tsx`, styles in `app/globals.css`): the OBS browser source. "LIVE WIRE" badge + scrolling strip, polls `/api/headlines` and `/api/settings` every 15s.
 - `/ticker?preview=1` — **Preview mode** of the same ticker. Never consumes "play next" headlines. When framed by the control panel it takes unsaved settings via `postMessage` (`ticker-preview:settings`, `ticker-preview:refresh`; it sends `ticker-preview:ready`, same-origin only). The control panel's Live preview (`PreviewStage`) shows it as a scaled 1920×1080 stream frame (bottom crop) with an "unsaved changes" badge.
@@ -18,28 +18,38 @@ Two-page web app, currently hosted on OpenAI ChatGPT Sites (Cloudflare Workers +
 - `headlines/route.ts` — fetches up to 24 RSS/Atom items (default Google News Sports). "Play next" custom headlines go first and are flipped to "rotation" once the ticker loads them (`?consumeNext=1`). One rotation custom headline is inserted after every 4 feed items. If the feed fails, only custom items show.
 - `settings/route.ts` — GET/PATCH appearance + feed settings (validated: hex colors, font whitelist, size 18–36, speed 30–180, public feed URL only).
 - `custom/route.ts`, `custom/[id]/route.ts` — list/add/update/delete custom headlines.
-- Writes require header `X-Admin-Key` == env `ADMIN_TOKEN` (falls back to `local` in dev). See `lib/admin-auth.ts`.
+- Writes require header `X-Admin-Key` == secret `ADMIN_TOKEN`. With no secret set, the key `local` works **only on localhost**; a deployed site without the secret is locked. See `lib/admin-auth.ts`.
 
 ## Data
-- D1 binding `DB` (see `.openai/hosting.json`, `db/`). Tables: `custom_headlines`, `ticker_settings` (single row id=1).
-- Schema in `db/schema.ts`; migrations in `drizzle/` (0000–0003). `npm run db:generate` after schema changes.
-- Live production data lives on the ChatGPT Sites hosting, not locally.
+- D1 binding `DB` (configured in `wrangler.jsonc`, database `lasorda-ticker-db`). Tables: `custom_headlines`, `ticker_settings` (single row id=1).
+- Schema in `db/schema.ts`; migrations in `drizzle/` (0000–0003). `npm run db:generate` after schema changes, then `npm run db:migrate:local` / `db:migrate:remote`.
 
 ## Stack & commands
 vinext (Next.js-style app router on Vite) · React 19 · Tailwind 4 · shadcn UI (`components/ui`) · drizzle · wrangler. Node >= 22.13.
 - `npm install` (first time on a machine — `node_modules` is not in git)
-- `npm run dev` — local dev server
+- `npm run db:migrate:local` (first time on a machine — creates the local test database)
+- `npm run dev` — local dev server at http://localhost:5173 (admin key `local`)
+- `npm run deploy` — build + deploy to Cloudflare
 - `npm run build`, `npm run lint`, `npm run format`
 
+## Hosting (Jay's own Cloudflare account, free plan)
+One-time setup (on Jay's PC, in the project folder):
+1. `npx wrangler login` (opens the browser to sign in to Cloudflare).
+2. `npx wrangler d1 create lasorda-ticker-db`, then paste the printed `database_id` into `wrangler.jsonc`.
+3. `npm run db:migrate:remote`
+4. `npx wrangler secret put ADMIN_TOKEN` (choose the editing password).
+5. `npm run deploy` → prints the URL, e.g. `https://lasorda-news-ticker.<account>.workers.dev`. Control panel at `/`, OBS source at `/ticker`.
+Note: `compatibility_date` must not be newer than what the installed wrangler supports.
+
 ## Remotes
-- `origin` = GitHub (use this).
-- `sites-origin` = ChatGPT Sites git (old hosting remote; may not exist on every machine).
+- `origin` = GitHub (the only remote).
 - `live-ticker-control*.tar.gz` are local-only snapshot archives on the home PC; gitignored.
 
 ## Status / open decisions
-- Hosting: keep on ChatGPT Sites, or move to Jay's own Cloudflare account (already Workers + D1, so a fairly small move). Undecided.
+- Hosting: decided — Jay's own Cloudflare account. Code is ready; Jay still needs to create the Cloudflare account and run the one-time setup above. Old ChatGPT Sites deployment and its data are abandoned (custom headlines/settings get re-entered).
 - Next feature work: not chosen yet — ask Jay.
 
 ## Change log
-- 2026-11-04: Working live preview: control panel preview updates instantly with unsaved appearance changes, no longer eats "play next" headlines, shown as a scaled 1080p stream frame; Arial/sans fallback for the ticker font. Local dev tip: apply `drizzle/*.sql` with `npx wrangler d1 execute site-creator-d1 --local --config wrangler.local.jsonc --persist-to .wrangler/state --file <f>`; dev admin key is `local`.
+- 2026-11-04: Removed all ChatGPT/OpenAI Sites tooling (`@openai/sites-vite-plugin`, `.openai/`, `wrangler.local.jsonc`, `sites-origin` remote); added `wrangler.jsonc` + deploy/migrate scripts for Jay's own Cloudflare; admin key `local` now only works on localhost.
+- 2026-11-04: Working live preview: control panel preview updates instantly with unsaved appearance changes, no longer eats "play next" headlines, shown as a scaled 1080p stream frame; Arial/sans fallback for the ticker font.
 - 2026-11-04: Moved repo to GitHub, gitignored snapshot archives, added this CLAUDE.md.
