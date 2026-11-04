@@ -45,7 +45,7 @@ type TickerSettings = {
   aiSummaries: boolean;
 };
 
-type AiStats = { off?: boolean; available?: boolean; ok?: number; rejected?: number; waiting?: number; error?: string | null };
+type AiStats = { off?: boolean; available?: boolean; ok?: number; rejected?: number; waiting?: number; skipped?: number; error?: string | null };
 
 type InstallPromptEvent = Event & {
   prompt: () => Promise<void>;
@@ -467,7 +467,7 @@ export function ControlPanel() {
                       ? 'AI isn’t connected on this server yet — publish with DEPLOY.cmd.'
                       : feedStatus.ai.error
                         ? `AI paused for a few minutes (${feedStatus.ai.error}) — original text is airing.`
-                        : `${feedStatus.ai.ok ?? 0} AI lines · ${feedStatus.ai.rejected ?? 0} kept original (failed safety check) · ${feedStatus.ai.waiting ?? 0} still being written`}
+                        : `${feedStatus.ai.ok ?? 0} AI lines · ${feedStatus.ai.rejected ?? 0} kept original (failed safety check) · ${feedStatus.ai.waiting ?? 0} still being written · ${feedStatus.ai.skipped ?? 0} skipped as not news (rankings, previews, analysis)`}
                   </p>
                 )}
               </div>

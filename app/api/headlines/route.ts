@@ -2,6 +2,7 @@ import { env } from 'cloudflare:workers';
 import { detectTeam } from '@/lib/teams';
 import { AI_PROMPT_VERSION, summarizeStory } from '@/lib/ai-summary';
 import { spreadTeamItems } from '@/lib/mix';
+import { isFeatureStory } from '@/lib/news-filter';
 
 export const dynamic = 'force-dynamic';
 const DEFAULT_FEED = 'https://www.espn.com/espn/rss/news';
@@ -136,7 +137,7 @@ async function getFeedHeadlines(feedUrl: string): Promise<FeedItem[]> {
   const xml = await fetchFeedXml(feedUrl);
   const entries = [...xml.matchAll(/<(?:item|entry)(?:\s[^>]*)?>([\s\S]*?)<\/(?:item|entry)>/gi)];
   return entries
-    .slice(0, 24)
+    .slice(0, 40)
     .map((match, index) => {
       const title = match[1].match(/<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i)?.[1] ?? '';
       const summary = match[1].match(/<(description|summary)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/i)?.[2] ?? '';
@@ -156,7 +157,7 @@ const AI_PER_REQUEST = 3;
 const AI_TIMEOUT_MS = 8000;
 const AI_PAUSE_AFTER_ERROR_MS = 5 * 60_000;
 const AI_KEEP_DAYS = 3;
-type AiEntry = { status: 'ok' | 'rejected'; line: string | null; team: string | null };
+type AiEntry = { status: 'ok' | 'rejected' | 'feature'; line: string | null; team: string | null };
 const aiMemory = new Map<string, AiEntry>();
 const aiInFlight = new Set<string>();
 let aiPausedUntil = 0;
@@ -193,7 +194,7 @@ async function getAiLines(items: FeedItem[]) {
         const outcome = await withTimeout(summarizeStory(ai as never, item.story), AI_TIMEOUT_MS);
         const entry: AiEntry = outcome.status === 'ok'
           ? { status: 'ok', line: outcome.result.line, team: outcome.result.team }
-          : { status: 'rejected', line: null, team: null };
+          : { status: outcome.status, line: null, team: null };
         aiMemory.set(key, entry);
         aiLastError = null;
         await env.DB.prepare('INSERT OR REPLACE INTO ai_lines (story_key, status, line, team, reason, created_at) VALUES (?, ?, ?, ?, ?, ?)')
@@ -219,9 +220,10 @@ async function getAiLines(items: FeedItem[]) {
   });
   const ok = [...lines.values()].filter((entry) => entry.status === 'ok').length;
   const rejected = [...lines.values()].filter((entry) => entry.status === 'rejected').length;
+  const features = [...lines.values()].filter((entry) => entry.status === 'feature').length;
   return {
     lines,
-    stats: { available: Boolean(env.AI), ok, rejected, waiting: items.length - ok - rejected, error: Date.now() < aiPausedUntil ? aiLastError : null },
+    stats: { available: Boolean(env.AI), ok, rejected, features, waiting: items.length - ok - rejected - features, error: Date.now() < aiPausedUntil ? aiLastError : null },
   };
 }
 
@@ -239,11 +241,14 @@ export async function GET(request: Request) {
 
   const result = await getCachedFeed(feedUrl);
   const aiEnabled = feedSettings?.aiSummaries !== 0;
-  const ai = aiEnabled && result.items.length ? await getAiLines(result.items) : null;
+  // Drop feature-style stories (rankings, previews, analysis) by wording first — no AI needed.
+  const newsItems = result.items.filter((item) => !isFeatureStory(item.story));
+  const skippedByRules = result.items.length - newsItems.length;
+  const ai = aiEnabled && newsItems.length ? await getAiLines(newsItems) : null;
 
   // AI line + AI-picked team when it passed the safety checks; otherwise the trimmed story text,
   // with the team panel of the first team the story mentions.
-  const feed: Headline[] = spreadTeamItems(result.items.map((item) => {
+  const feed: Headline[] = spreadTeamItems(newsItems.filter((item) => ai?.lines.get(item.id)?.status !== 'feature').map((item) => {
     const entry = ai?.lines.get(item.id);
     const useAi = entry?.status === 'ok' && entry.line;
     return {
@@ -276,5 +281,5 @@ export async function GET(request: Request) {
     await env.DB.prepare(`UPDATE custom_headlines SET placement = 'rotation' WHERE id IN (${placeholders})`).bind(...ids).run();
   }
 
-  return Response.json({ headlines: mixed, feedAvailable, feedError, feedStale, feedAgeSeconds, feedUrl, ai: ai?.stats ?? { off: true }, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ headlines: mixed, feedAvailable, feedError, feedStale, feedAgeSeconds, feedUrl, ai: ai ? { ...ai.stats, skipped: skippedByRules + ai.stats.features } : { off: true, skipped: skippedByRules }, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
 }

@@ -5,7 +5,7 @@
 import { detectTeam, mentionsTeam, teamsNamed, type Team } from './teams';
 
 /** Bump when the prompt changes so stories get rewritten with the new instructions. */
-export const AI_PROMPT_VERSION = 4;
+export const AI_PROMPT_VERSION = 5;
 
 // Tried in order. Cloudflare retires models from time to time (llama-3.1-8b-instruct was retired
 // 2026-05-30), so if one is gone the next is used automatically. No OpenAI models (Jay's rule).
@@ -32,32 +32,50 @@ Rules:
 - Normal capitalization: capitalize the first word and all names of people, teams and places.
 - No hype, no opinions, no emojis, no hashtags, no quotation marks around the line.
 
+Also label the story:
+- KIND: NEWS if it reports something that actually happened or was officially announced: a result or score, signing, trade, release, injury, firing or hiring, suspension, award, election, official decision.
+- KIND: FEATURE if it is analysis, a ranking or list, a preview, a prediction, an opinion, a profile, or a teaser that does not state a concrete event.
+
 Examples:
 Story: The Bills have released safety C.J. Gardner-Johnson, the team announced Tuesday.
+KIND: NEWS
 TEAM: Bills
 LINE: Bills release safety C.J. Gardner-Johnson
 
 Story: Dylan Samberg scored in overtime as the Winnipeg Jets snapped a nine-game losing streak by storming back from a four-goal deficit.
+KIND: NEWS
 TEAM: Jets
 LINE: Winnipeg Jets rally from four goals down, win in overtime to snap nine-game skid
 
 Story: Arizona State, picked third in the Big 12 preseason poll, beat Utah 31-17 on Saturday.
+KIND: NEWS
 TEAM: NONE
 LINE: Arizona State beats Utah 31-17
 
+Story: Devin Vassell has quietly evolved into the veteran presence for the San Antonio Spurs.
+KIND: FEATURE
+TEAM: Spurs
+LINE: Devin Vassell has become the Spurs' veteran presence
+
 Reply in exactly this format and nothing else:
+KIND: <NEWS or FEATURE>
 TEAM: <nickname of the NFL, NBA, MLB or NHL team the story is mainly about, or NONE for college and other sports>
 LINE: <the ticker line>`;
 
 export type AiResult = { line: string; team: string | null };
-export type AiOutcome = { status: 'ok'; result: AiResult } | { status: 'rejected'; reason: string };
+export type AiOutcome =
+  | { status: 'ok'; result: AiResult }
+  | { status: 'rejected'; reason: string }
+  /** Not news (ranking, preview, analysis…): left off the ticker. */
+  | { status: 'feature' };
 
 /** Pull TEAM/LINE out of the model's reply. */
-export function parseReply(raw: string): { team: string | null; line: string } | null {
+export function parseReply(raw: string): { team: string | null; line: string; feature: boolean } | null {
   const line = raw.match(/^\s*LINE:\s*(.+)$/im)?.[1]?.trim();
   if (!line) return null;
   const team = raw.match(/^\s*TEAM:\s*(.+)$/im)?.[1]?.trim() ?? '';
-  return { line: line.replace(/^["“'‘]+|["”'’]+$/g, '').trim(), team: /^none$/i.test(team) || !team ? null : team };
+  const feature = /^\s*KIND:\s*FEATURE\b/im.test(raw);
+  return { line: line.replace(/^["“'‘]+|["”'’]+$/g, '').trim(), team: /^none$/i.test(team) || !team ? null : team, feature };
 }
 
 const normalize = (value: string) => value.toLowerCase().replace(/[’']/g, "'");
@@ -129,7 +147,7 @@ export async function summarizeStory(ai: AiBinding, story: string): Promise<AiOu
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: story },
         ],
-        max_tokens: 80,
+        max_tokens: 100,
         temperature: 0.2,
       });
       preferredModel = index;
@@ -141,6 +159,7 @@ export async function summarizeStory(ai: AiBinding, story: string): Promise<AiOu
   }
   const parsed = parseReply(replyText(output));
   if (!parsed) return { status: 'rejected', reason: 'unreadable reply' };
+  if (parsed.feature) return { status: 'feature' };
   const problem = checkLine(parsed.line, story);
   if (problem) return { status: 'rejected', reason: problem };
   if (/^[a-z]/.test(parsed.line) && parsed.line.split(/\s+/).length > 3 && !/[A-Z]/.test(parsed.line)) {
