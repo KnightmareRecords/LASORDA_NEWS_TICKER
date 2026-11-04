@@ -2,10 +2,10 @@
 // Every AI line must pass checkLine() before it can air; anything that fails falls back to the
 // plain (trimmed) story text, so a made-up score or name never reaches the stream.
 
-import { detectTeam, mentionsTeam, teamsNamed, TEAMS_BY_KEY, type Team } from './teams';
+import { detectTeam, mentionsTeam, teamsNamed, type Team } from './teams';
 
 /** Bump when the prompt changes so stories get rewritten with the new instructions. */
-export const AI_PROMPT_VERSION = 3;
+export const AI_PROMPT_VERSION = 4;
 
 // Tried in order. Cloudflare retires models from time to time (llama-3.1-8b-instruct was retired
 // 2026-05-30), so if one is gone the next is used automatically. No OpenAI models (Jay's rule).
@@ -97,24 +97,13 @@ export function resolveTeam(teamName: string | null, source: string): Team | nul
   return matches.length === 1 ? matches[0] : null;
 }
 
-const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
- * Final polish of an approved line: capital first letter, and when a team panel will show the team,
- * drop the team name from the start ("Bills release…" → "Release…", like ESPN's BottomLine).
+ * Final polish of an approved line: capital first letter. The team name stays in the line even when
+ * a team panel shows it — stripping it left confusing fragments like "Lose Lamar Jackson".
  */
-export function finishLine(line: string, teamKey: string | null) {
-  let text = line.trim();
-  const team = teamKey ? TEAMS_BY_KEY.get(teamKey) : undefined;
-  if (team) {
-    for (const name of [`${team.city} ${team.name}`, team.name, ...(team.aliases ?? [])]) {
-      const stripped = text.replace(new RegExp(`^(?:the\\s+)?${escapeRegex(name)}(?!['’])\\s+`, 'i'), '');
-      if (stripped !== text && stripped.length >= 15) {
-        text = stripped;
-        break;
-      }
-    }
-  }
+export function finishLine(line: string) {
+  const text = line.trim();
   return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
@@ -158,5 +147,5 @@ export async function summarizeStory(ai: AiBinding, story: string): Promise<AiOu
     return { status: 'rejected', reason: 'all lowercase' };
   }
   const team = resolveTeam(parsed.team, story)?.key ?? detectTeam(story)?.key ?? null;
-  return { status: 'ok', result: { line: finishLine(parsed.line, team), team } };
+  return { status: 'ok', result: { line: finishLine(parsed.line), team } };
 }

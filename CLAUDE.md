@@ -52,10 +52,11 @@ Note: `compatibility_date` must not be newer than what the installed wrangler su
 - Next feature work: not chosen yet — ask Jay.
 
 ## Change log
+- 2026-11-04: AI prompt v4: team name kept in AI lines even with a team panel (stripping it gave fragments like "Lose Lamar Jackson"). Deployed NHL + half-height ticker remotely.
 - 2026-11-04: Slimmer ticker for eBay Live: bar height = text size × 1.68 (25px → 42px, was 84px), logo block ~105px (was 196px), slant/labels/team panels scale with it; logo keeps its 2.43:1 ratio (height-driven + object-fit). OBS source height now 60.
 - 2026-11-04: Added all 32 NHL teams (dropdown, auto-detection, logo slots). Shared nicknames resolved by city or league context words. AI prompt v3 (NHL teams, college example → NONE).
 - 2026-11-04: Feed stories with a team panel are spread evenly among generic ones (`lib/mix.ts` `spreadTeamItems`, order kept within each group). Jay set the on-screen label to NEWS.
-- 2026-11-04: AI prompt v2 (story key prefixed `v2:` so old lines are redone): line starts with who + what, normal capitalization, examples; team name stripped from the start when a team panel shows it (`finishLine`); all-lowercase output rejected; AI team pick goes through the same NHL filter (`mentionsTeam`).
+- 2026-11-04: AI prompt v2 (story key prefixed `v2:` so old lines are redone): line starts with who + what, normal capitalization, examples; all-lowercase output rejected; AI team pick goes through the same NHL filter (`mentionsTeam`).
 - 2026-11-04: Deployed remotely (migrations 0004+0005 applied). Switched AI to a model list with automatic fallback after llama-3.1-8b-instruct turned out to be retired; NHL names (Winnipeg Jets, NY Rangers, LA Kings, Florida Panthers) no longer trigger NFL/NBA/MLB panels. Added DEPLOY-UNATTENDED.cmd.
 - 2026-11-04: AI short lines via Cloudflare Workers AI, straight to air with safety checks (Jay's choice); on/off switch + status in the control panel. Migration 0005 (`ai_lines`, `ticker_settings.ai_summaries`).
 - 2026-11-04: Team logo slot (`public/teams/<key>.png`, Jay supplies files; hidden when missing). Long summaries cut to first sentence / ~150 chars. Discussed AI one-line summaries via Cloudflare Workers AI (free 10k neurons/day ≈ ~9 per line) with a number-check guard — awaiting Jay's go-ahead.
