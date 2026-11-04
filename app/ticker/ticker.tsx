@@ -30,13 +30,17 @@ export function Ticker() {
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const [settings, setSettings] = useState<TickerSettings>(defaultSettings);
   const [scrollDuration, setScrollDuration] = useState(140);
+  const [previewOverride, setPreviewOverride] = useState<Partial<TickerSettings> | null>(null);
   const firstLoad = useRef(true);
   const groupRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(async () => {
     try {
+      // Preview mode (control panel) must never consume "play next" headlines meant for OBS.
+      const isPreview = new URLSearchParams(window.location.search).has('preview');
+      const consume = firstLoad.current && !isPreview;
       const [response, settingsResponse] = await Promise.all([
-        fetch(`/api/headlines${firstLoad.current ? '?consumeNext=1' : ''}`, { cache: 'no-store' }),
+        fetch(`/api/headlines${consume ? '?consumeNext=1' : ''}`, { cache: 'no-store' }),
         fetch('/api/settings', { cache: 'no-store' }),
       ]);
       if (!response.ok || !settingsResponse.ok) throw new Error();
@@ -56,15 +60,31 @@ export function Ticker() {
     return () => window.clearInterval(timer);
   }, [load]);
 
+  // Preview mode: the control panel streams unsaved settings in and asks for refreshes.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has('preview') || window.parent === window) return;
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin) return;
+      const data = event.data as { type?: string; settings?: Partial<TickerSettings> } | null;
+      if (data?.type === 'ticker-preview:settings' && data.settings) setPreviewOverride(data.settings);
+      if (data?.type === 'ticker-preview:refresh') void load();
+    };
+    window.addEventListener('message', onMessage);
+    window.parent.postMessage({ type: 'ticker-preview:ready' }, window.location.origin);
+    return () => window.removeEventListener('message', onMessage);
+  }, [load]);
+
+  const view: TickerSettings = previewOverride ? { ...settings, ...previewOverride } : settings;
+
   useEffect(() => {
     const group = groupRef.current;
     if (!group) return;
-    const measure = () => setScrollDuration(Math.max(group.scrollWidth / settings.scrollSpeed, 8));
+    const measure = () => setScrollDuration(Math.max(group.scrollWidth / view.scrollSpeed, 8));
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(group);
     return () => observer.disconnect();
-  }, [headlines, settings.scrollSpeed]);
+  }, [headlines, view.scrollSpeed, view.fontSize, view.fontFamily]);
 
   if (status === 'loading') return null;
   if (status === 'error' || headlines.length === 0) {
@@ -84,11 +104,11 @@ export function Ticker() {
       className="ticker-shell"
       aria-label="Live sports headlines"
       style={{
-        '--ticker-accent': settings.accentColor,
-        '--ticker-background': settings.backgroundColor,
-        '--ticker-text': settings.textColor,
-        '--ticker-font': settings.fontFamily === 'Geist' ? 'var(--font-geist-sans)' : settings.fontFamily,
-        '--ticker-size': `${settings.fontSize}px`,
+        '--ticker-accent': view.accentColor,
+        '--ticker-background': view.backgroundColor,
+        '--ticker-text': view.textColor,
+        '--ticker-font': view.fontFamily === 'Geist' ? 'var(--font-geist-sans)' : view.fontFamily,
+        '--ticker-size': `${view.fontSize}px`,
         '--ticker-duration': `${scrollDuration}s`,
       } as CSSProperties}
     >

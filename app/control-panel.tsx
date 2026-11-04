@@ -1,7 +1,7 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
-import { Check, Copy, Download, ExternalLink, Palette, Plus, Radio, RefreshCw, Trash2, Zap } from 'lucide-react';
+import { FormEvent, useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import { Check, Copy, Download, ExternalLink, MonitorPlay, Palette, Plus, Radio, RefreshCw, Trash2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -66,8 +66,15 @@ export function ControlPanel() {
   const [settings, setSettings] = useState<TickerSettings>(defaultSettings);
   const [appearanceSaving, setAppearanceSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
-  const [previewVersion, setPreviewVersion] = useState(0);
+  const [savedSettings, setSavedSettings] = useState<TickerSettings>(defaultSettings);
+  const previewRef = useRef<HTMLIFrameElement>(null);
+  const settingsRef = useRef(settings);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+
+  const postToPreview = useCallback((message: object) => {
+    previewRef.current?.contentWindow?.postMessage(message, window.location.origin);
+  }, []);
+  const refreshPreview = useCallback(() => postToPreview({ type: 'ticker-preview:refresh' }), [postToPreview]);
 
   const load = useCallback(async () => {
     try {
@@ -75,19 +82,40 @@ export function ControlPanel() {
       const response = await fetch('/api/custom', { cache: 'no-store' });
       if (!response.ok) throw new Error('Could not load custom headlines.');
       setItems(await response.json());
+      refreshPreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [refreshPreview]);
 
   useEffect(() => void load(), [load]);
+
+  // Live preview: push every (unsaved) appearance change into the preview ticker.
+  useEffect(() => {
+    settingsRef.current = settings;
+    postToPreview({ type: 'ticker-preview:settings', settings });
+  }, [settings, postToPreview]);
+
+  useEffect(() => {
+    const onMessage = (event: MessageEvent) => {
+      if (event.origin !== window.location.origin || event.source !== previewRef.current?.contentWindow) return;
+      if ((event.data as { type?: string } | null)?.type === 'ticker-preview:ready') {
+        postToPreview({ type: 'ticker-preview:settings', settings: settingsRef.current });
+      }
+    };
+    window.addEventListener('message', onMessage);
+    return () => window.removeEventListener('message', onMessage);
+  }, [postToPreview]);
 
   useEffect(() => {
     void fetch('/api/settings', { cache: 'no-store' })
       .then((response) => response.json() as Promise<TickerSettings>)
-      .then(setSettings)
+      .then((loaded) => {
+        setSettings(loaded);
+        setSavedSettings(loaded);
+      })
       .catch(() => setError('Could not load ticker appearance.'));
   }, []);
 
@@ -124,8 +152,10 @@ export function ControlPanel() {
         body: JSON.stringify(settings),
       });
       if (!response.ok) throw new Error('Could not save appearance. Check your admin key.');
-      setSettings(await response.json() as TickerSettings);
-      setPreviewVersion(Date.now());
+      const saved = await response.json() as TickerSettings;
+      setSettings(saved);
+      setSavedSettings(saved);
+      refreshPreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
@@ -211,6 +241,8 @@ export function ControlPanel() {
     if (!response.ok) {
       setError('That change did not save.');
       await load();
+    } else {
+      refreshPreview();
     }
   }
 
@@ -228,6 +260,7 @@ export function ControlPanel() {
         throw new Error(result?.error || 'That headline could not be removed.');
       }
       setItems((current) => current.filter((item) => item.id !== id));
+      refreshPreview();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'That headline could not be removed.');
     } finally {
@@ -261,11 +294,17 @@ export function ControlPanel() {
             <Button variant="outline" className="border-white/15 bg-white/5 text-white hover:bg-white/10" onClick={copyTickerUrl}>
               {copied ? <Check /> : <Copy />} {copied ? 'Copied' : 'Copy OBS URL'}
             </Button>
-            <Button className="bg-[#ffb000] text-black hover:bg-[#ffc13b]" onClick={() => window.open('/ticker', '_blank')}>
+            <Button className="bg-[#ffb000] text-black hover:bg-[#ffc13b]" onClick={() => window.open('/ticker?preview=1', '_blank')}>
               Preview ticker <ExternalLink />
             </Button>
           </div>
         </header>
+
+        <PreviewStage
+          frameRef={previewRef}
+          unsaved={JSON.stringify(settings) !== JSON.stringify(savedSettings)}
+          feedChanged={settings.feedUrl !== savedSettings.feedUrl || settings.feedLabel !== savedSettings.feedLabel}
+        />
 
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
           <div className="rounded-2xl border border-white/10 bg-[#101520] p-5 shadow-2xl shadow-black/20 sm:p-7">
@@ -399,12 +438,6 @@ export function ControlPanel() {
               </Button>
             </section>
 
-            <section className="overflow-hidden rounded-2xl border border-white/10 bg-[#101520]">
-              <div className="border-b border-white/10 p-5"><p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Live preview</p></div>
-              <div className="relative h-48 bg-[radial-gradient(circle_at_40%_20%,#26364c,#0b1018_60%)]">
-                <iframe title="Ticker preview" src={`/ticker?preview=${previewVersion}`} className="absolute inset-x-0 bottom-4 h-20 w-full border-0" />
-              </div>
-            </section>
             <section className="rounded-2xl border border-white/10 bg-[#101520] p-5">
               <h2 className="font-semibold">OBS setup</h2>
               <ol className="mt-4 space-y-3 text-sm leading-6 text-slate-400">
@@ -422,5 +455,57 @@ export function ControlPanel() {
         </section>
       </div>
     </main>
+  );
+}
+
+const STAGE_WIDTH = 1920;
+const STAGE_HEIGHT = 1080;
+// Show only the lower part of the 1080p frame (where the ticker lives) so the preview stays compact.
+const VISIBLE_HEIGHT = 360;
+
+function PreviewStage({ frameRef, unsaved, feedChanged }: { frameRef: RefObject<HTMLIFrameElement | null>; unsaved: boolean; feedChanged: boolean }) {
+  const boxRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(0.5);
+
+  useEffect(() => {
+    const box = boxRef.current;
+    if (!box) return;
+    // ResizeObserver fires once on observe(), so this also sets the initial scale.
+    const observer = new ResizeObserver(() => setScale(box.clientWidth / STAGE_WIDTH));
+    observer.observe(box);
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <section className="mb-6 overflow-hidden rounded-2xl border border-white/10 bg-[#101520]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/10 px-5 py-4">
+        <div className="flex items-center gap-2">
+          <MonitorPlay className="size-4 text-[#ffb000]" />
+          <h2 className="font-semibold">Live preview</h2>
+          <span className="text-xs text-slate-500">bottom of a 1920 × 1080 stream</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {unsaved ? (
+            <span className="rounded-full bg-[#ffb000]/15 px-2.5 py-1 font-semibold text-[#ffc13b]">Unsaved changes — not on stream yet</span>
+          ) : (
+            <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 font-semibold text-emerald-300">Matches what OBS shows</span>
+          )}
+          {feedChanged && <span className="rounded-full bg-white/5 px-2.5 py-1 text-slate-400">New feed headlines load after saving</span>}
+        </div>
+      </div>
+      <div ref={boxRef} className="relative w-full overflow-hidden bg-[radial-gradient(circle_at_35%_25%,#26364c,#0b1018_65%)]" style={{ aspectRatio: `${STAGE_WIDTH} / ${VISIBLE_HEIGHT}` }}>
+        <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(transparent_49.5%,rgb(255_255_255/4%)_50%,transparent_50.5%),linear-gradient(90deg,transparent_49.5%,rgb(255_255_255/4%)_50%,transparent_50.5%)]" />
+        <iframe
+          ref={frameRef}
+          title="Ticker preview"
+          src="/ticker?preview=1"
+          width={STAGE_WIDTH}
+          height={STAGE_HEIGHT}
+          className="absolute bottom-0 left-0 origin-bottom-left border-0 bg-transparent"
+          style={{ transform: `scale(${scale})` }}
+        />
+      </div>
+      <p className="px-5 py-3 text-xs text-slate-500">Preview never uses up your “front once” headlines — only the OBS source does.</p>
+    </section>
   );
 }

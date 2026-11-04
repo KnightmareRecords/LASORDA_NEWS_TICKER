@@ -12,6 +12,7 @@ Owner: Jay. Works on this from two computers (home + office), one at a time.
 Two-page web app, currently hosted on OpenAI ChatGPT Sites (Cloudflare Workers + D1 SQLite under the hood). Originally built with OpenAI Codex.
 - `/` — **Control panel** (`app/control-panel.tsx`): add / enable / delete custom headlines ("rotation" or "play next"), RSS feed URL + label, colors, font, font size, scroll speed, OBS setup info, installable as an app (PWA, `public/sw.js`, `app/manifest.ts`).
 - `/ticker` — **The ticker** (`app/ticker/ticker.tsx`, styles in `app/globals.css`): the OBS browser source. "LIVE WIRE" badge + scrolling strip, polls `/api/headlines` and `/api/settings` every 15s.
+- `/ticker?preview=1` — **Preview mode** of the same ticker. Never consumes "play next" headlines. When framed by the control panel it takes unsaved settings via `postMessage` (`ticker-preview:settings`, `ticker-preview:refresh`; it sends `ticker-preview:ready`, same-origin only). The control panel's Live preview (`PreviewStage`) shows it as a scaled 1920×1080 stream frame (bottom crop) with an "unsaved changes" badge.
 
 ## API (`app/api/`)
 - `headlines/route.ts` — fetches up to 24 RSS/Atom items (default Google News Sports). "Play next" custom headlines go first and are flipped to "rotation" once the ticker loads them (`?consumeNext=1`). One rotation custom headline is inserted after every 4 feed items. If the feed fails, only custom items show.
@@ -40,4 +41,5 @@ vinext (Next.js-style app router on Vite) · React 19 · Tailwind 4 · shadcn UI
 - Next feature work: not chosen yet — ask Jay.
 
 ## Change log
+- 2026-11-04: Working live preview: control panel preview updates instantly with unsaved appearance changes, no longer eats "play next" headlines, shown as a scaled 1080p stream frame; Arial/sans fallback for the ticker font. Local dev tip: apply `drizzle/*.sql` with `npx wrangler d1 execute site-creator-d1 --local --config wrangler.local.jsonc --persist-to .wrangler/state --file <f>`; dev admin key is `local`.
 - 2026-11-04: Moved repo to GitHub, gitignored snapshot archives, added this CLAUDE.md.
