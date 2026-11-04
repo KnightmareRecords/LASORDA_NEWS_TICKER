@@ -72,7 +72,7 @@ export function ControlPanel() {
   const [appearanceSaving, setAppearanceSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [savedSettings, setSavedSettings] = useState<TickerSettings>(defaultSettings);
-  const [feedStatus, setFeedStatus] = useState<{ ok: boolean; count: number; error: string | null } | null>(null);
+  const [feedStatus, setFeedStatus] = useState<{ ok: boolean; stale: boolean; ageMinutes: number; count: number; error: string | null } | null>(null);
   const previewRef = useRef<HTMLIFrameElement>(null);
   const settingsRef = useRef(settings);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
@@ -83,8 +83,14 @@ export function ControlPanel() {
   const checkFeed = useCallback(async () => {
     try {
       const response = await fetch('/api/headlines', { cache: 'no-store' });
-      const data = (await response.json()) as { headlines: { source: string }[]; feedAvailable: boolean; feedError?: string | null };
-      setFeedStatus({ ok: data.feedAvailable, count: data.headlines.filter((item) => item.source !== 'LIVE').length, error: data.feedError ?? null });
+      const data = (await response.json()) as { headlines: { source: string }[]; feedAvailable: boolean; feedError?: string | null; feedStale?: boolean; feedAgeSeconds?: number };
+      setFeedStatus({
+        ok: data.feedAvailable,
+        stale: Boolean(data.feedStale),
+        ageMinutes: Math.max(1, Math.round((data.feedAgeSeconds ?? 0) / 60)),
+        count: data.headlines.filter((item) => item.source !== 'LIVE').length,
+        error: data.feedError ?? null,
+      });
     } catch {
       setFeedStatus(null);
     }
@@ -329,7 +335,7 @@ export function ControlPanel() {
             <div className="mb-5 flex items-center justify-between">
               <div>
                 <h2 className="text-xl font-semibold">Custom headlines</h2>
-                <p className="mt-1 text-sm text-slate-400">Your enabled items are mixed between ESPN stories.</p>
+                <p className="mt-1 text-sm text-slate-400">Your enabled items are mixed in between the news stories.</p>
               </div>
               <Button aria-label="Refresh list" size="icon" variant="ghost" className="text-slate-400 hover:bg-white/10 hover:text-white" onClick={load}><RefreshCw /></Button>
             </div>
@@ -388,8 +394,10 @@ export function ControlPanel() {
                 On-screen label
                 <Input id="feed-label" value={settings.feedLabel} maxLength={18} onChange={(event) => setSettings((current) => ({ ...current, feedLabel: event.target.value.toUpperCase() }))} placeholder="SPORTS" className="mt-2 h-10 border-white/10 bg-white/5 text-white" />
               </label>
-              {feedStatus && (feedStatus.ok ? (
-                <p className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs text-emerald-200/80">Feed working — {feedStatus.count} headlines loaded.</p>
+              {feedStatus && (feedStatus.ok && feedStatus.stale ? (
+                <p className="mt-3 rounded-lg border border-[#ffb000]/25 bg-[#ffb000]/10 px-3 py-2 text-xs leading-5 text-[#ffd27a]">Couldn’t refresh the feed just now: {feedStatus.error} Still showing the {feedStatus.count} headlines saved {feedStatus.ageMinutes} min ago — it will retry in a couple of minutes.</p>
+              ) : feedStatus.ok ? (
+                <p className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs text-emerald-200/80">Feed working — {feedStatus.count} headlines loaded. New stories are picked up every 15 minutes.</p>
               ) : (
                 <p role="alert" className="mt-3 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-xs leading-5 text-red-200">Feed not loading: {feedStatus.error || 'unknown error'} Only your custom headlines are showing.</p>
               ))}
@@ -468,7 +476,7 @@ export function ControlPanel() {
                 <li><span className="mr-2 font-mono text-[#ffb000]">02</span> Use the ticker URL and set width to 1920, height to 120.</li>
                 <li><span className="mr-2 font-mono text-[#ffb000]">03</span> Position it along the bottom edge.</li>
               </ol>
-              <div className="mt-5 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-emerald-200/80">The overlay background is transparent. ESPN refreshes every 30 minutes; custom changes reach OBS within 15 seconds.</div>
+              <div className="mt-5 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-emerald-200/80">The overlay background is transparent. News headlines refresh every 15 minutes; your custom changes reach OBS within 15 seconds.</div>
             </section>
             <section className="rounded-2xl border border-white/10 bg-[#101520] p-5">
               <h2 className="font-semibold">Install on your computer</h2>

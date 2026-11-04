@@ -15,7 +15,7 @@ Two-page web app on Cloudflare Workers + D1 (SQLite). Jay wants **no ChatGPT/Ope
 - `/ticker?preview=1` — **Preview mode** of the same ticker. Never consumes "play next" headlines. When framed by the control panel it takes unsaved settings via `postMessage` (`ticker-preview:settings`, `ticker-preview:refresh`; it sends `ticker-preview:ready`, same-origin only). The control panel's Live preview (`PreviewStage`) shows it as a scaled 1920×1080 stream frame (bottom crop) with an "unsaved changes" badge.
 
 ## API (`app/api/`)
-- `headlines/route.ts` — fetches up to 24 RSS/Atom items (default Google News Sports). "Play next" custom headlines go first and are flipped to "rotation" once the ticker loads them (`?consumeNext=1`). One rotation custom headline is inserted after every 4 feed items. If the feed fails, only custom items show.
+- `headlines/route.ts` — fetches up to 24 RSS/Atom items (default Google News Sports). Feed is cached in memory per isolate: re-fetched at most every 15 min (Jay's choice), retried 2 min after a failure, and the last good copy is served for up to 12 h if the feed site refuses (Google returns 503 to frequent requests from Cloudflare). Response includes `feedError`, `feedStale`, `feedAgeSeconds`. "Play next" custom headlines go first and are flipped to "rotation" once the ticker loads them (`?consumeNext=1`). One rotation custom headline is inserted after every 4 feed items. If the feed fails, only custom items show.
 - `settings/route.ts` — GET/PATCH appearance + feed settings (validated: hex colors, font whitelist, size 18–36, speed 30–180, public feed URL only).
 - `custom/route.ts`, `custom/[id]/route.ts` — list/add/update/delete custom headlines.
 - Writes require header `X-Admin-Key` == secret `ADMIN_TOKEN`. With no secret set, the key `local` works **only on localhost**; a deployed site without the secret is locked. See `lib/admin-auth.ts`.
@@ -47,10 +47,11 @@ Note: `compatibility_date` must not be newer than what the installed wrangler su
 
 ## Status / open decisions
 - Hosting: LIVE on Jay's Cloudflare (subdomain `newsticker`): control panel https://lasorda-news-ticker.newsticker.workers.dev, OBS source `/ticker`. Publish updates with `DEPLOY.cmd` (Windows) / `npm run deploy`; change the admin password with `SET PASSWORD.cmd` (no deploy needed); first-time setup with `SETUP CLOUDFLARE.cmd` / `node scripts/setup-cloudflare.mjs`. Deploys run on Jay's computer. Old ChatGPT Sites data abandoned.
-- Google News feed failed on first Cloudflare deploy; 2bacf36 adds browser headers, 8s timeout and a feed-status message in the control panel — check it after deploying; switch feeds if Google keeps refusing.
+- Google News intermittently returns 503 to Cloudflare. Mitigated by the 15-min feed cache + serve-last-good; if it keeps failing, switch to another sports RSS feed.
 - Next feature work: not chosen yet — ask Jay.
 
 ## Change log
+- 2026-11-04: Feed cached for 15 min with last-good fallback (fixes Google 503s dropping news headlines); control panel shows amber 'saved headlines' status; corrected outdated ESPN wording.
 - 2026-11-04: Admin key errors now say why (wrong key vs no password set on server); key compared trimmed; added SET PASSWORD.cmd.
 - 2026-11-04: Site live on Cloudflare (newsticker.workers.dev); added SETUP CLOUDFLARE.cmd, DEPLOY.cmd, feed error reporting + timeout.
 - 2026-11-04: Removed all ChatGPT/OpenAI Sites tooling (`@openai/sites-vite-plugin`, `.openai/`, `wrangler.local.jsonc`, `sites-origin` remote); added `wrangler.jsonc` + deploy/migrate scripts for Jay's own Cloudflare; admin key `local` now only works on localhost.

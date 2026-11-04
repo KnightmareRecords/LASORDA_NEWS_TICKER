@@ -21,7 +21,43 @@ function decodeXml(value: string) {
     .trim();
 }
 
-async function getFeedHeadlines(feedUrl: string, feedLabel: string): Promise<Headline[]> {
+type FeedItem = { id: string; text: string };
+type CachedFeed = { items: FeedItem[]; fetchedAt: number; lastFailureAt: number; lastError: string | null };
+
+// Feed sites (Google News especially) rate-limit frequent requests. Every OBS ticker and control
+// panel polls every 15s, so keep the last good copy in memory and only re-fetch every 15 minutes.
+// If the feed site refuses, keep showing the last good headlines for a while instead of dropping them.
+const FRESH_FOR_MS = 15 * 60_000;
+const RETRY_AFTER_FAILURE_MS = 2 * 60_000;
+const KEEP_STALE_FOR_MS = 12 * 60 * 60_000;
+const feedCache = new Map<string, CachedFeed>();
+
+function describeFeedError(error: unknown) {
+  if (error instanceof Error && error.name === 'TimeoutError') return 'The feed site did not answer in time.';
+  return error instanceof Error ? error.message : 'The feed could not be loaded.';
+}
+
+async function getCachedFeed(feedUrl: string) {
+  const now = Date.now();
+  const cached = feedCache.get(feedUrl);
+  const usable = cached && cached.items.length > 0 && now - cached.fetchedAt < KEEP_STALE_FOR_MS ? cached : null;
+  if (usable && now - usable.fetchedAt < FRESH_FOR_MS) return { items: usable.items, ageMs: now - usable.fetchedAt, error: null };
+  if (cached && now - cached.lastFailureAt < RETRY_AFTER_FAILURE_MS) {
+    return { items: usable?.items ?? [], ageMs: usable ? now - usable.fetchedAt : 0, error: cached.lastError };
+  }
+  try {
+    const items = await getFeedHeadlines(feedUrl);
+    feedCache.set(feedUrl, { items, fetchedAt: now, lastFailureAt: 0, lastError: null });
+    return { items, ageMs: 0, error: null };
+  } catch (error) {
+    console.error('RSS feed fetch failed', error);
+    const message = describeFeedError(error);
+    feedCache.set(feedUrl, { items: usable?.items ?? [], fetchedAt: usable?.fetchedAt ?? 0, lastFailureAt: now, lastError: message });
+    return { items: usable?.items ?? [], ageMs: usable ? now - usable.fetchedAt : 0, error: message };
+  }
+}
+
+async function getFeedHeadlines(feedUrl: string): Promise<FeedItem[]> {
   const response = await fetch(feedUrl, {
     signal: AbortSignal.timeout(8000),
     headers: {
@@ -40,7 +76,7 @@ async function getFeedHeadlines(feedUrl: string, feedLabel: string): Promise<Hea
     .map((match, index) => {
       const title = match[1].match(/<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i)?.[1] ?? '';
       const guid = match[1].match(/<(?:guid|id)(?:\s[^>]*)?>([\s\S]*?)<\/(?:guid|id)>/i)?.[1] ?? `feed-${index}`;
-      return { id: decodeXml(guid), text: decodeXml(title), source: feedLabel };
+      return { id: decodeXml(guid), text: decodeXml(title) };
     })
     .filter((item) => item.text);
 }
@@ -57,16 +93,13 @@ export async function GET(request: Request) {
   const feedUrl = feedSettings?.feedUrl || DEFAULT_FEED;
   const feedLabel = feedSettings?.feedLabel || 'SPORTS';
 
-  let feed: Headline[] = [];
-  let feedAvailable = true;
-  let feedError: string | null = null;
-  try {
-    feed = await getFeedHeadlines(feedUrl, feedLabel);
-  } catch (error) {
-    console.error('RSS feed fetch failed', error);
-    feedAvailable = false;
-    feedError = error instanceof Error && error.name !== 'TimeoutError' ? error.message : 'The feed site did not answer in time.';
-  }
+  const result = await getCachedFeed(feedUrl);
+  const feed: Headline[] = result.items.map((item) => ({ ...item, source: feedLabel }));
+  const feedAvailable = feed.length > 0;
+  const feedError = result.error;
+  // True when we're showing saved headlines because the feed site refused the latest request.
+  const feedStale = feedAvailable && Boolean(feedError);
+  const feedAgeSeconds = Math.round(result.ageMs / 1000);
 
   const next = custom.filter((item) => item.placement === 'next').map((item) => ({ id: `custom-${item.id}`, text: item.text, source: 'LIVE' as const }));
   const rotation = custom.filter((item) => item.placement === 'rotation').map((item) => ({ id: `custom-${item.id}`, text: item.text, source: 'LIVE' as const }));
@@ -83,5 +116,5 @@ export async function GET(request: Request) {
     await env.DB.prepare(`UPDATE custom_headlines SET placement = 'rotation' WHERE id IN (${placeholders})`).bind(...ids).run();
   }
 
-  return Response.json({ headlines: mixed, feedAvailable, feedError, feedUrl, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ headlines: mixed, feedAvailable, feedError, feedStale, feedAgeSeconds, feedUrl, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
 }
