@@ -1,7 +1,8 @@
 import { env } from 'cloudflare:workers';
 
 export const dynamic = 'force-dynamic';
-const DEFAULT_FEED = 'https://news.google.com/rss/topics/CAAqKggKIiRDQkFTRlFvSUwyMHZNRFp1ZEdvU0JXVnVMVlZUR2dKVlV5Z0FQAQ?hl=en-US&gl=US&ceid=US:en';
+const DEFAULT_FEED = 'https://www.espn.com/espn/rss/news';
+const MAX_ITEM_LENGTH = 220;
 
 type Headline = { id: string; text: string; source: string };
 type CustomRow = { id: number; text: string; placement: 'rotation' | 'next' };
@@ -9,6 +10,7 @@ type FeedSettings = { feedUrl: string; feedLabel: string };
 
 function decodeXml(value: string) {
   return value
+    .trim()
     .replace(/^<!\[CDATA\[|\]\]>$/g, '')
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
@@ -17,8 +19,23 @@ function decodeXml(value: string) {
     .replace(/&gt;/g, '>')
     .replace(/&#(\d+);/g, (_match, code) => String.fromCodePoint(Number(code)))
     .replace(/&#x([0-9a-f]+);/gi, (_match, code) => String.fromCodePoint(Number.parseInt(code, 16)))
-    .replace(/<[^>]+>/g, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
+}
+
+function shorten(text: string) {
+  if (text.length <= MAX_ITEM_LENGTH) return text;
+  const cut = text.slice(0, MAX_ITEM_LENGTH);
+  return `${cut.slice(0, cut.lastIndexOf(' ')).replace(/[,;:\-–—]+$/, '')}…`;
+}
+
+// Prefer the story summary (it carries the facts — scores, stats, decisions); headlines are often
+// click teasers. Fall back to the headline when the feed has no usable summary (e.g. Google News,
+// whose description is just links).
+function pickText(title: string, summary: string) {
+  const usable = summary.length >= 40 && !/https?:\/\//i.test(summary) && !summary.startsWith(title);
+  return shorten(usable ? summary : title);
 }
 
 type FeedItem = { id: string; text: string };
@@ -75,8 +92,9 @@ async function getFeedHeadlines(feedUrl: string): Promise<FeedItem[]> {
     .slice(0, 24)
     .map((match, index) => {
       const title = match[1].match(/<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i)?.[1] ?? '';
+      const summary = match[1].match(/<(description|summary)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/i)?.[2] ?? '';
       const guid = match[1].match(/<(?:guid|id)(?:\s[^>]*)?>([\s\S]*?)<\/(?:guid|id)>/i)?.[1] ?? `feed-${index}`;
-      return { id: decodeXml(guid), text: decodeXml(title) };
+      return { id: decodeXml(guid), text: pickText(decodeXml(title), decodeXml(summary)) };
     })
     .filter((item) => item.text);
 }

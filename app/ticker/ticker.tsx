@@ -46,7 +46,9 @@ export function Ticker() {
       if (!response.ok || !settingsResponse.ok) throw new Error();
       const data = (await response.json()) as { headlines: Headline[] };
       setSettings(await settingsResponse.json() as TickerSettings);
-      if (data.headlines.length) setHeadlines(data.headlines);
+      // Always replace the list — keeping the old one when it came back empty left deleted
+      // custom headlines on screen.
+      setHeadlines(data.headlines);
       setStatus('ready');
       firstLoad.current = false;
     } catch {
@@ -91,8 +93,9 @@ export function Ticker() {
     return <div className="ticker-shell"><div className="ticker-badge">LIVE</div><div className="ticker-empty">HEADLINES TEMPORARILY UNAVAILABLE</div></div>;
   }
 
-  const strip = headlines.map((item) => (
-    <span className="ticker-item" key={item.id}>
+  // A rotation custom headline can appear several times in one strip, so ids aren't unique keys.
+  const strip = headlines.map((item, index) => (
+    <span className="ticker-item" key={`${index}-${item.id}`}>
       <strong className={item.source === 'LIVE' ? 'source-live' : ''}>{item.source}</strong>
       <span>{item.text}</span>
       <i aria-hidden="true" />

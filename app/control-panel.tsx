@@ -39,7 +39,7 @@ const defaultSettings: TickerSettings = {
   fontFamily: 'Geist',
   fontSize: 25,
   scrollSpeed: 90,
-  feedUrl: 'https://news.google.com/rss/topics/CAAqKggKIiRDQkFTRlFvSUwyMHZNRFp1ZEdvU0JXVnVMVlZUR2dKVlV5Z0FQAQ?hl=en-US&gl=US&ceid=US:en',
+  feedUrl: 'https://www.espn.com/espn/rss/news',
   feedLabel: 'SPORTS',
 };
 
