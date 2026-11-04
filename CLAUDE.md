@@ -52,6 +52,7 @@ Note: `compatibility_date` must not be newer than what the installed wrangler su
 - Next feature work: not chosen yet — ask Jay.
 
 ## Change log
+- 2026-11-04: Feed strip always opens with a team story (team panel first on screen); team stories at evenly spaced slots from position 0 (`spreadTeamItems`). "Play next" custom headlines still go before it.
 - 2026-11-04: Non-news filter: `lib/news-filter.ts` word rules (questions, "Here's…", "we break down", power rankings, previews, betting, fantasy…) drop feature stories before AI; AI prompt v5 also labels KIND: NEWS/FEATURE and features are dropped (`ai_lines.status = 'feature'`). Feed reads 40 items (was 24). Control panel shows "skipped as not news" count.
 - 2026-11-04: AI prompt v4: team name kept in AI lines even with a team panel (stripping it gave fragments like "Lose Lamar Jackson"). Deployed NHL + half-height ticker remotely.
 - 2026-11-04: Slimmer ticker for eBay Live: bar height = text size × 1.68 (25px → 42px, was 84px), logo block ~105px (was 196px), slant/labels/team panels scale with it; logo keeps its 2.43:1 ratio (height-driven + object-fit). OBS source height now 60.
