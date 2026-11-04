@@ -8,6 +8,10 @@ export const customHeadlines = sqliteTable('custom_headlines', {
     .notNull()
     .default('rotation'),
   createdAt: integer('created_at').notNull(),
+  /** Team key from lib/teams.ts (e.g. 'nfl-kc'); shows a team-colored panel on the ticker. */
+  team: text('team'),
+  /** Optional tag shown before the item, e.g. 'DEVELOPING STORY'. */
+  tag: text('tag'),
 });
 
 export const tickerSettings = sqliteTable('ticker_settings', {

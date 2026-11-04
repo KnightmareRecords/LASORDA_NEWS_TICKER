@@ -1,11 +1,12 @@
 import { env } from 'cloudflare:workers';
+import { detectTeam } from '@/lib/teams';
 
 export const dynamic = 'force-dynamic';
 const DEFAULT_FEED = 'https://www.espn.com/espn/rss/news';
 const MAX_ITEM_LENGTH = 220;
 
-type Headline = { id: string; text: string; source: string };
-type CustomRow = { id: number; text: string; placement: 'rotation' | 'next' };
+type Headline = { id: string; text: string; source: string; team: string | null; tag: string | null };
+type CustomRow = { id: number; text: string; placement: 'rotation' | 'next'; team: string | null; tag: string | null };
 type FeedSettings = { feedUrl: string; feedLabel: string };
 
 function decodeXml(value: string) {
@@ -127,7 +128,7 @@ async function getFeedHeadlines(feedUrl: string): Promise<FeedItem[]> {
 export async function GET(request: Request) {
   const consumeNext = new URL(request.url).searchParams.get('consumeNext') === '1';
   const customResult = await env.DB.prepare(
-    "SELECT id, text, placement FROM custom_headlines WHERE enabled = 1 ORDER BY CASE placement WHEN 'next' THEN 0 ELSE 1 END, created_at DESC",
+    "SELECT id, text, placement, team, tag FROM custom_headlines WHERE enabled = 1 ORDER BY CASE placement WHEN 'next' THEN 0 ELSE 1 END, created_at DESC",
   ).all<CustomRow>();
   const custom = customResult.results;
   const feedSettings = await env.DB.prepare(
@@ -137,15 +138,17 @@ export async function GET(request: Request) {
   const feedLabel = feedSettings?.feedLabel || 'SPORTS';
 
   const result = await getCachedFeed(feedUrl);
-  const feed: Headline[] = result.items.map((item) => ({ ...item, source: feedLabel }));
+  // Feed stories get the team panel of the first team they mention.
+  const feed: Headline[] = result.items.map((item) => ({ ...item, source: feedLabel, team: detectTeam(item.text)?.key ?? null, tag: null }));
   const feedAvailable = feed.length > 0;
   const feedError = result.error;
   // True when we're showing saved headlines because the feed site refused the latest request.
   const feedStale = feedAvailable && Boolean(feedError);
   const feedAgeSeconds = Math.round(result.ageMs / 1000);
 
-  const next = custom.filter((item) => item.placement === 'next').map((item) => ({ id: `custom-${item.id}`, text: item.text, source: 'LIVE' as const }));
-  const rotation = custom.filter((item) => item.placement === 'rotation').map((item) => ({ id: `custom-${item.id}`, text: item.text, source: 'LIVE' as const }));
+  const toHeadline = (item: CustomRow): Headline => ({ id: `custom-${item.id}`, text: item.text, source: 'LIVE', team: item.team, tag: item.tag });
+  const next = custom.filter((item) => item.placement === 'next').map(toHeadline);
+  const rotation = custom.filter((item) => item.placement === 'rotation').map(toHeadline);
   const mixed: Headline[] = [...next];
   feed.forEach((item, index) => {
     mixed.push(item);

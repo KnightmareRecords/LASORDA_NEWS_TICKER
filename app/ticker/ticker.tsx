@@ -1,8 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { panelColors, TEAMS_BY_KEY } from '@/lib/teams';
 
-type Headline = { id: string; text: string; source: string };
+type Headline = { id: string; text: string; source: string; team?: string | null; tag?: string | null };
+
+// Brand block on the left edge (like the SportsCenter bug): logo on a light panel, accent trim.
+function Brand() {
+  return (
+    <div className="ticker-badge">
+      <div className="ticker-brand">
+        {/* Plain <img>: a small static logo in an OBS overlay, no image optimizer needed. */}
+        {/* oxlint-disable-next-line next/no-img-element */}
+        <img src="/brand/lasordas-card-house.png" alt="Lasorda's Card House" />
+      </div>
+    </div>
+  );
+}
 type TickerSettings = {
   accentColor: string;
   backgroundColor: string;
@@ -103,24 +117,33 @@ export function Ticker() {
   if (status === 'error' || headlines.length === 0) {
     return (
       <main className="ticker-shell" aria-label="Live sports headlines" style={shellStyle}>
-        <div className="ticker-badge"><span className="live-dot" /> LIVE WIRE</div>
+        <Brand />
         <div className="ticker-window"><div className="ticker-empty">HEADLINES TEMPORARILY UNAVAILABLE</div></div>
       </main>
     );
   }
 
   // A rotation custom headline can appear several times in one strip, so ids aren't unique keys.
-  const strip = headlines.map((item, index) => (
-    <span className="ticker-item" key={`${index}-${item.id}`}>
-      <strong className={item.source === 'LIVE' ? 'source-live' : ''}>{item.source}</strong>
-      <span>{item.text}</span>
-      <i aria-hidden="true" />
-    </span>
-  ));
+  const strip = headlines.map((item, index) => {
+    const team = item.team ? TEAMS_BY_KEY.get(item.team) : undefined;
+    const colors = team ? panelColors(team) : null;
+    return (
+      <span className="ticker-item" key={`${index}-${item.id}`}>
+        {item.tag && <em className="ticker-tag">{item.tag}</em>}
+        {team ? (
+          <b className="ticker-team" style={{ '--team-bg': colors?.background, '--team-fg': colors?.text } as CSSProperties}>{team.name}</b>
+        ) : (
+          <strong className={item.source === 'LIVE' ? 'source-live' : ''}>{item.source}</strong>
+        )}
+        <span>{item.text}</span>
+        <i aria-hidden="true" />
+      </span>
+    );
+  });
 
   return (
     <main className="ticker-shell" aria-label="Live sports headlines" style={shellStyle}>
-      <div className="ticker-badge"><span className="live-dot" /> LIVE WIRE</div>
+      <Brand />
       <div className="ticker-window">
         <div className="ticker-track">
           <div ref={groupRef} className="ticker-group">{strip}</div>

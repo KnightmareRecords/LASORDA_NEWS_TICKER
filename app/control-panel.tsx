@@ -7,12 +7,29 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
+import { panelColors, TEAMS, TEAMS_BY_KEY, type League } from '@/lib/teams';
+
+const TAG_SUGGESTIONS = ['BREAKING', 'DEVELOPING STORY', 'BREAK ALERT', 'NEW DROP', 'GIVEAWAY', 'FINAL'];
+const LEAGUES: League[] = ['NFL', 'NBA', 'MLB'];
+
+function TeamChip({ teamKey }: { teamKey: string | null }) {
+  const team = teamKey ? TEAMS_BY_KEY.get(teamKey) : undefined;
+  if (!team) return null;
+  const colors = panelColors(team);
+  return (
+    <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-bold uppercase tracking-wide" style={{ background: colors.background, color: colors.text }}>
+      {team.name}
+    </span>
+  );
+}
 
 type CustomHeadline = {
   id: number;
   text: string;
   enabled: boolean;
   placement: 'rotation' | 'next';
+  team: string | null;
+  tag: string | null;
   createdAt: number;
 };
 
@@ -63,6 +80,8 @@ export function ControlPanel() {
   const [items, setItems] = useState<CustomHeadline[]>([]);
   const [headline, setHeadline] = useState('');
   const [placement, setPlacement] = useState<'rotation' | 'next'>('rotation');
+  const [team, setTeam] = useState('');
+  const [tag, setTag] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -242,11 +261,13 @@ export function ControlPanel() {
       const response = await fetch('/api/custom', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
-        body: JSON.stringify({ text: clean, placement }),
+        body: JSON.stringify({ text: clean, placement, team: team || null, tag: tag.trim() || null }),
       });
       if (!response.ok) throw new Error(await errorFrom(response, 'Could not add the headline.'));
       setHeadline('');
       setPlacement('rotation');
+      setTeam('');
+      setTag('');
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
@@ -303,6 +324,8 @@ export function ControlPanel() {
       <div className="mx-auto max-w-6xl px-5 py-8 sm:px-8 sm:py-12">
         <header className="mb-9 flex flex-col gap-6 border-b border-white/10 pb-8 md:flex-row md:items-end md:justify-between">
           <div>
+            {/* oxlint-disable-next-line next/no-img-element */}
+            <img src="/brand/lasordas-card-house.png" alt="Lasorda's Card House" className="mb-4 h-14 w-auto" />
             <div className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.2em] text-[#ffb000]">
               <Radio className="size-4" /> Live broadcast tools
             </div>
@@ -351,6 +374,26 @@ export function ControlPanel() {
             <form onSubmit={addHeadline} className="mb-7 rounded-xl border border-white/10 bg-black/20 p-4">
               <label htmlFor="headline" className="mb-2 block text-sm font-medium text-slate-200">New headline</label>
               <Input id="headline" value={headline} maxLength={180} onChange={(event) => setHeadline(event.target.value)} placeholder="Example: $5 starts on every card for the next 10 minutes" className="h-11 border-white/15 bg-white/5 text-white placeholder:text-slate-600" />
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label htmlFor="headline-team" className="text-xs font-medium text-slate-400">
+                  Team panel (optional)
+                  <select id="headline-team" value={team} onChange={(event) => setTeam(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-white/15 bg-[#151b27] px-2 text-sm text-white">
+                    <option value="">None — show LIVE</option>
+                    {LEAGUES.map((league) => (
+                      <optgroup key={league} label={league}>
+                        {TEAMS.filter((item) => item.league === league).map((item) => (
+                          <option key={item.key} value={item.key}>{item.city === item.name ? item.name : `${item.city} ${item.name}`}</option>
+                        ))}
+                      </optgroup>
+                    ))}
+                  </select>
+                </label>
+                <label htmlFor="headline-tag" className="text-xs font-medium text-slate-400">
+                  Tag (optional)
+                  <Input id="headline-tag" list="tag-suggestions" value={tag} maxLength={24} onChange={(event) => setTag(event.target.value.toUpperCase())} placeholder="e.g. DEVELOPING STORY" className="mt-1.5 h-10 border-white/15 bg-white/5 text-white placeholder:text-slate-600" />
+                  <datalist id="tag-suggestions">{TAG_SUGGESTIONS.map((suggestion) => <option key={suggestion} value={suggestion}>{suggestion}</option>)}</datalist>
+                </label>
+              </div>
               <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-300">
                   <Switch checked={placement === 'next'} onCheckedChange={(checked) => setPlacement(checked ? 'next' : 'rotation')} />
@@ -369,6 +412,12 @@ export function ControlPanel() {
                 <article key={item.id} className={`flex items-start gap-3 rounded-xl border p-4 transition ${item.enabled ? 'border-white/10 bg-white/[0.035]' : 'border-white/5 bg-transparent opacity-55'}`}>
                   <Switch aria-label={`${item.enabled ? 'Disable' : 'Enable'} ${item.text}`} checked={item.enabled} onCheckedChange={(enabled) => update(item.id, { enabled })} className="mt-0.5" />
                   <div className="min-w-0 flex-1">
+                    {(item.team || item.tag) && (
+                      <div className="mb-1.5 flex flex-wrap items-center gap-1.5">
+                        {item.tag && <span className="rounded bg-[#d0002a] px-1.5 py-0.5 text-[10px] font-extrabold tracking-[0.12em] text-white">{item.tag}</span>}
+                        <TeamChip teamKey={item.team} />
+                      </div>
+                    )}
                     <p className="break-words text-[15px] leading-6 text-slate-100">{item.text}</p>
                     <button type="button" onClick={() => update(item.id, { placement: item.placement === 'next' ? 'rotation' : 'next' })} className={`mt-2 inline-flex items-center gap-1.5 rounded-full px-2 py-1 text-xs font-semibold ${item.placement === 'next' ? 'bg-[#ffb000]/15 text-[#ffc13b]' : 'bg-white/5 text-slate-500 hover:text-slate-300'}`}>
                       <Zap className="size-3" /> {item.placement === 'next' ? 'Plays first next refresh' : 'Normal rotation'}
