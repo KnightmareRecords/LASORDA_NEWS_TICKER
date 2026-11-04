@@ -1,6 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { detectTeam } from '@/lib/teams';
-import { summarizeStory } from '@/lib/ai-summary';
+import { AI_PROMPT_VERSION, summarizeStory } from '@/lib/ai-summary';
 
 export const dynamic = 'force-dynamic';
 const DEFAULT_FEED = 'https://www.espn.com/espn/rss/news';
@@ -164,7 +164,7 @@ let aiLastError: string | null = null;
 function storyKey(item: FeedItem) {
   let hash = 0x811c9dc5;
   for (let index = 0; index < item.story.length; index++) hash = Math.imul(hash ^ item.story.charCodeAt(index), 0x01000193);
-  return `${item.id}#${(hash >>> 0).toString(16)}`;
+  return `v${AI_PROMPT_VERSION}:${item.id}#${(hash >>> 0).toString(16)}`;
 }
 
 function withTimeout<T>(promise: Promise<T>, ms: number) {

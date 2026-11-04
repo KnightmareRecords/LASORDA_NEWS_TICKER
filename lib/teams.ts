@@ -173,13 +173,23 @@ const matchers = TEAMS.flatMap((team) =>
   }),
 );
 
-/** First team mentioned in a piece of news copy, if any. */
-export function detectTeam(text: string): Team | null {
-  // Hockey teams aren't in the list; remove NHL names that share a nickname with an NFL/NBA/MLB team
-  // (otherwise "Winnipeg Jets" would get the New York Jets panel).
-  const cleaned = text
+// Hockey teams aren't in the list; remove NHL names that share a nickname with an NFL/NBA/MLB team
+// (otherwise "Winnipeg Jets" would get the New York Jets panel).
+function cleanForMatching(text: string) {
+  return text
     .replace(/Magic Johnson/g, '')
     .replace(/\b(?:Winnipeg Jets|New York Rangers|NY Rangers|Los Angeles Kings|L\.?A\.? Kings|Florida Panthers)\b/g, '');
+}
+
+/** Whether a piece of news copy mentions this team (same rules as detectTeam). */
+export function mentionsTeam(text: string, team: Team) {
+  const cleaned = cleanForMatching(text);
+  return matchers.some((matcher) => matcher.team.key === team.key && matcher.regex.test(cleaned));
+}
+
+/** First team mentioned in a piece of news copy, if any. */
+export function detectTeam(text: string): Team | null {
+  const cleaned = cleanForMatching(text);
   let best: { team: Team; index: number } | null = null;
   for (const { team, regex } of matchers) {
     const index = cleaned.search(regex);

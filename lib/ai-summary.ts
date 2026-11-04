@@ -2,7 +2,10 @@
 // Every AI line must pass checkLine() before it can air; anything that fails falls back to the
 // plain (trimmed) story text, so a made-up score or name never reaches the stream.
 
-import { detectTeam, type Team } from './teams';
+import { detectTeam, mentionsTeam, TEAMS_BY_KEY, type Team } from './teams';
+
+/** Bump when the prompt changes so stories get rewritten with the new instructions. */
+export const AI_PROMPT_VERSION = 2;
 
 // Tried in order. Cloudflare retires models from time to time (llama-3.1-8b-instruct was retired
 // 2026-05-30), so if one is gone the next is used automatically. No OpenAI models (Jay's rule).
@@ -20,17 +23,26 @@ function isModelGone(error: unknown) {
 export const AI_MAX_LENGTH = 110;
 
 const SYSTEM_PROMPT = `You write lines for a live sports TV news ticker, like ESPN's BottomLine.
-Rewrite the story you are given as ONE short, factual line.
+Rewrite the story you are given as ONE short, factual line that makes sense on its own.
 
 Rules:
 - At most 90 characters.
+- Start with who the story is about (the team or player), then what happened: the result, score, stat, signing, trade or injury.
 - Use ONLY facts stated in the story. Never add numbers, names, scores, dates or details that are not in it.
-- Lead with what happened: the result, score, stat, signing, trade or injury.
-- Plain sentence case. No hype, no opinions, no emojis, no hashtags, no quotation marks around the line.
-- Do not start the line with the team name; it is shown separately.
+- Normal capitalization: capitalize the first word and all names of people, teams and places.
+- No hype, no opinions, no emojis, no hashtags, no quotation marks around the line.
+
+Examples:
+Story: The Bills have released safety C.J. Gardner-Johnson, the team announced Tuesday.
+TEAM: Bills
+LINE: Bills release safety C.J. Gardner-Johnson
+
+Story: Dylan Samberg scored in overtime as the Winnipeg Jets snapped a nine-game losing streak by storming back from a four-goal deficit.
+TEAM: NONE
+LINE: Winnipeg Jets rally from four goals down, win in overtime to snap nine-game skid
 
 Reply in exactly this format and nothing else:
-TEAM: <nickname of the one team the story is mainly about, or NONE>
+TEAM: <nickname of the NFL, NBA or MLB team the story is mainly about, or NONE>
 LINE: <the ticker line>`;
 
 export type AiResult = { line: string; team: string | null };
@@ -76,10 +88,29 @@ export function checkLine(line: string, source: string): string | null {
 /** Map the model's TEAM answer to a known team, only if the story itself mentions that team. */
 export function resolveTeam(teamName: string | null, source: string): Team | null {
   if (!teamName) return null;
-  const team = detectTeam(teamName) ?? detectTeam(`${teamName}`.replace(/^the\s+/i, ''));
-  if (!team) return null;
-  const mentioned = [team.name, ...(team.aliases ?? [])].some((name) => source.includes(name));
-  return mentioned ? team : null;
+  const team = detectTeam(teamName.replace(/^the\s+/i, ''));
+  return team && mentionsTeam(source, team) ? team : null;
+}
+
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Final polish of an approved line: capital first letter, and when a team panel will show the team,
+ * drop the team name from the start ("Bills release…" → "Release…", like ESPN's BottomLine).
+ */
+export function finishLine(line: string, teamKey: string | null) {
+  let text = line.trim();
+  const team = teamKey ? TEAMS_BY_KEY.get(teamKey) : undefined;
+  if (team) {
+    for (const name of [`${team.city} ${team.name}`, team.name, ...(team.aliases ?? [])]) {
+      const stripped = text.replace(new RegExp(`^(?:the\\s+)?${escapeRegex(name)}(?!['’])\\s+`, 'i'), '');
+      if (stripped !== text && stripped.length >= 15) {
+        text = stripped;
+        break;
+      }
+    }
+  }
+  return text.charAt(0).toUpperCase() + text.slice(1);
 }
 
 type AiBinding = { run: (model: string, input: Record<string, unknown>) => Promise<unknown> };
@@ -118,5 +149,9 @@ export async function summarizeStory(ai: AiBinding, story: string): Promise<AiOu
   if (!parsed) return { status: 'rejected', reason: 'unreadable reply' };
   const problem = checkLine(parsed.line, story);
   if (problem) return { status: 'rejected', reason: problem };
-  return { status: 'ok', result: { line: parsed.line, team: resolveTeam(parsed.team, story)?.key ?? null } };
+  if (/^[a-z]/.test(parsed.line) && parsed.line.split(/\s+/).length > 3 && !/[A-Z]/.test(parsed.line)) {
+    return { status: 'rejected', reason: 'all lowercase' };
+  }
+  const team = resolveTeam(parsed.team, story)?.key ?? detectTeam(story)?.key ?? null;
+  return { status: 'ok', result: { line: finishLine(parsed.line, team), team } };
 }
