@@ -41,3 +41,5 @@ next-env.d.ts
 *.tar.gz
 *.bundle
 tsconfig.tsbuildinfo
+
+deploy-log.txt

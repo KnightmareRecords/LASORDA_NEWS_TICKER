@@ -4,7 +4,19 @@
 
 import { detectTeam, type Team } from './teams';
 
-export const AI_MODEL = '@cf/meta/llama-3.1-8b-instruct';
+// Tried in order. Cloudflare retires models from time to time (llama-3.1-8b-instruct was retired
+// 2026-05-30), so if one is gone the next is used automatically. No OpenAI models (Jay's rule).
+export const AI_MODELS = [
+  '@cf/meta/llama-3.3-70b-instruct-fp8-fast',
+  '@cf/mistralai/mistral-small-3.1-24b-instruct',
+  '@cf/google/gemma-3-12b-it',
+];
+let preferredModel = 0;
+
+function isModelGone(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /deprecat|5028|5007|no such model|model not found|not available|unknown model/i.test(message);
+}
 export const AI_MAX_LENGTH = 110;
 
 const SYSTEM_PROMPT = `You write lines for a live sports TV news ticker, like ESPN's BottomLine.
@@ -83,14 +95,25 @@ function replyText(output: unknown) {
 
 /** Ask the model for a ticker line and run the safety checks. Throws if the AI service itself fails. */
 export async function summarizeStory(ai: AiBinding, story: string): Promise<AiOutcome> {
-  const output = await ai.run(AI_MODEL, {
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: story },
-    ],
-    max_tokens: 80,
-    temperature: 0.2,
-  });
+  let output: unknown;
+  for (let index = preferredModel; ; index++) {
+    if (index >= AI_MODELS.length) throw new Error('None of the AI models are available on Cloudflare any more.');
+    try {
+      output = await ai.run(AI_MODELS[index], {
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: story },
+        ],
+        max_tokens: 80,
+        temperature: 0.2,
+      });
+      preferredModel = index;
+      break;
+    } catch (error) {
+      if (!isModelGone(error)) throw error;
+      console.warn(`AI model ${AI_MODELS[index]} is unavailable, trying the next one`, error);
+    }
+  }
   const parsed = parseReply(replyText(output));
   if (!parsed) return { status: 'rejected', reason: 'unreadable reply' };
   const problem = checkLine(parsed.line, story);
