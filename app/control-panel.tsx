@@ -10,7 +10,7 @@ import { Slider } from '@/components/ui/slider';
 import { panelColors, TEAMS, TEAMS_BY_KEY, type League } from '@/lib/teams';
 
 const TAG_SUGGESTIONS = ['BREAKING', 'DEVELOPING STORY', 'BREAK ALERT', 'NEW DROP', 'GIVEAWAY', 'FINAL'];
-const LEAGUES: League[] = ['NFL', 'NBA', 'MLB'];
+const LEAGUES: League[] = ['NFL', 'NBA', 'MLB', 'NHL'];
 
 function TeamChip({ teamKey }: { teamKey: string | null }) {
   const team = teamKey ? TEAMS_BY_KEY.get(teamKey) : undefined;

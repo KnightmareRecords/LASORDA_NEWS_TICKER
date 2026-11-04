@@ -2,10 +2,10 @@
 // Every AI line must pass checkLine() before it can air; anything that fails falls back to the
 // plain (trimmed) story text, so a made-up score or name never reaches the stream.
 
-import { detectTeam, mentionsTeam, TEAMS_BY_KEY, type Team } from './teams';
+import { detectTeam, mentionsTeam, teamsNamed, TEAMS_BY_KEY, type Team } from './teams';
 
 /** Bump when the prompt changes so stories get rewritten with the new instructions. */
-export const AI_PROMPT_VERSION = 2;
+export const AI_PROMPT_VERSION = 3;
 
 // Tried in order. Cloudflare retires models from time to time (llama-3.1-8b-instruct was retired
 // 2026-05-30), so if one is gone the next is used automatically. No OpenAI models (Jay's rule).
@@ -38,11 +38,15 @@ TEAM: Bills
 LINE: Bills release safety C.J. Gardner-Johnson
 
 Story: Dylan Samberg scored in overtime as the Winnipeg Jets snapped a nine-game losing streak by storming back from a four-goal deficit.
-TEAM: NONE
+TEAM: Jets
 LINE: Winnipeg Jets rally from four goals down, win in overtime to snap nine-game skid
 
+Story: Arizona State, picked third in the Big 12 preseason poll, beat Utah 31-17 on Saturday.
+TEAM: NONE
+LINE: Arizona State beats Utah 31-17
+
 Reply in exactly this format and nothing else:
-TEAM: <nickname of the NFL, NBA or MLB team the story is mainly about, or NONE>
+TEAM: <nickname of the NFL, NBA, MLB or NHL team the story is mainly about, or NONE for college and other sports>
 LINE: <the ticker line>`;
 
 export type AiResult = { line: string; team: string | null };
@@ -88,8 +92,9 @@ export function checkLine(line: string, source: string): string | null {
 /** Map the model's TEAM answer to a known team, only if the story itself mentions that team. */
 export function resolveTeam(teamName: string | null, source: string): Team | null {
   if (!teamName) return null;
-  const team = detectTeam(teamName.replace(/^the\s+/i, ''));
-  return team && mentionsTeam(source, team) ? team : null;
+  // "Jets" could be the NFL or NHL Jets: keep the one the story itself is about.
+  const matches = teamsNamed(teamName).filter((team) => mentionsTeam(source, team));
+  return matches.length === 1 ? matches[0] : null;
 }
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');

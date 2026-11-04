@@ -2,7 +2,7 @@
 // published; tweak any entry here if a shade looks off on stream.
 // Only team names and colors are used — no official logos or wordmarks (trademarks).
 
-export type League = 'NFL' | 'NBA' | 'MLB';
+export type League = 'NFL' | 'NBA' | 'MLB' | 'NHL';
 export type Team = {
   key: string;
   league: League;
@@ -12,9 +12,11 @@ export type Team = {
   secondary: string;
   /** Other ways the team is written in news copy. */
   aliases?: string[];
+  /** Other ways the city is written ("LA", "Tampa"). */
+  cityAliases?: string[];
 };
 
-const t = (league: League, abbr: string, city: string, name: string, primary: string, secondary: string, aliases?: string[]): Team => ({
+const t = (league: League, abbr: string, city: string, name: string, primary: string, secondary: string, aliases?: string[], cityAliases?: string[]): Team => ({
   key: `${league.toLowerCase()}-${abbr.toLowerCase()}`,
   league,
   city,
@@ -22,6 +24,7 @@ const t = (league: League, abbr: string, city: string, name: string, primary: st
   primary,
   secondary,
   aliases,
+  cityAliases,
 });
 
 export const TEAMS: Team[] = [
@@ -120,6 +123,39 @@ export const TEAMS: Team[] = [
   t('MLB', 'TEX', 'Texas', 'Rangers', '#003278', '#C0111F'),
   t('MLB', 'TOR', 'Toronto', 'Blue Jays', '#134A8E', '#E8291C', ['Jays']),
   t('MLB', 'WSH', 'Washington', 'Nationals', '#AB0003', '#14225A', ['Nats']),
+  // NHL
+  t('NHL', 'ANA', 'Anaheim', 'Ducks', '#F47A38', '#B9975B'),
+  t('NHL', 'BOS', 'Boston', 'Bruins', '#000000', '#FFB81C', ["B's"]),
+  t('NHL', 'BUF', 'Buffalo', 'Sabres', '#003087', '#FFB81C'),
+  t('NHL', 'CGY', 'Calgary', 'Flames', '#C8102E', '#F1BE48'),
+  t('NHL', 'CAR', 'Carolina', 'Hurricanes', '#CC0000', '#000000', ['Canes']),
+  t('NHL', 'CHI', 'Chicago', 'Blackhawks', '#CF0A2C', '#000000'),
+  t('NHL', 'COL', 'Colorado', 'Avalanche', '#6F263D', '#236192', ['Avs']),
+  t('NHL', 'CBJ', 'Columbus', 'Blue Jackets', '#002654', '#CE1126'),
+  t('NHL', 'DAL', 'Dallas', 'Stars', '#006847', '#8F8F8C'),
+  t('NHL', 'DET', 'Detroit', 'Red Wings', '#CE1126', '#FFFFFF'),
+  t('NHL', 'EDM', 'Edmonton', 'Oilers', '#041E42', '#FF4C00'),
+  t('NHL', 'FLA', 'Florida', 'Panthers', '#041E42', '#C8102E'),
+  t('NHL', 'LAK', 'Los Angeles', 'Kings', '#111111', '#A2AAAD', undefined, ['LA', 'L.A.']),
+  t('NHL', 'MIN', 'Minnesota', 'Wild', '#154734', '#A6192E'),
+  t('NHL', 'MTL', 'Montreal', 'Canadiens', '#AF1E2D', '#192168', ['Habs']),
+  t('NHL', 'NSH', 'Nashville', 'Predators', '#FFB81C', '#041E42', ['Preds']),
+  t('NHL', 'NJD', 'New Jersey', 'Devils', '#CE1126', '#000000'),
+  t('NHL', 'NYI', 'New York', 'Islanders', '#00539B', '#F47D30', ['Isles']),
+  t('NHL', 'NYR', 'New York', 'Rangers', '#0038A8', '#CE1126', undefined, ['NY']),
+  t('NHL', 'OTT', 'Ottawa', 'Senators', '#C52032', '#000000', ['Sens']),
+  t('NHL', 'PHI', 'Philadelphia', 'Flyers', '#F74902', '#000000'),
+  t('NHL', 'PIT', 'Pittsburgh', 'Penguins', '#000000', '#FCB514', ['Pens']),
+  t('NHL', 'SJS', 'San Jose', 'Sharks', '#006D75', '#EA7200'),
+  t('NHL', 'SEA', 'Seattle', 'Kraken', '#001628', '#99D9D9'),
+  t('NHL', 'STL', 'St. Louis', 'Blues', '#002F87', '#FCB514'),
+  t('NHL', 'TBL', 'Tampa Bay', 'Lightning', '#002868', '#FFFFFF', ['Bolts']),
+  t('NHL', 'TOR', 'Toronto', 'Maple Leafs', '#00205B', '#FFFFFF', ['Leafs']),
+  t('NHL', 'UTA', 'Utah', 'Mammoth', '#010101', '#69B3E7'),
+  t('NHL', 'VAN', 'Vancouver', 'Canucks', '#00205B', '#00843D'),
+  t('NHL', 'VGK', 'Vegas', 'Golden Knights', '#B4975A', '#333F42', ['Knights']),
+  t('NHL', 'WSH', 'Washington', 'Capitals', '#041E42', '#C8102E', ['Caps']),
+  t('NHL', 'WPG', 'Winnipeg', 'Jets', '#041E42', '#004C97'),
 ];
 
 export const TEAMS_BY_KEY = new Map(TEAMS.map((team) => [team.key, team]));
@@ -160,40 +196,91 @@ export function panelTextColor(team: Team) {
 
 const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// Nicknames shared by two leagues (Cardinals, Giants, Bucs): only used when the city is also named.
+// Nicknames shared by two leagues (Jets, Rangers, Kings, Panthers, Cardinals, Giants, Bucs).
 const nameCounts = new Map<string, number>();
 for (const team of TEAMS) for (const name of [team.name, ...(team.aliases ?? [])]) nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
 
-const matchers = TEAMS.flatMap((team) =>
-  [team.name, ...(team.aliases ?? [])].map((name) => {
+type Matcher = { team: Team; regex: RegExp; name: string; ambiguous: boolean };
+
+// Case-sensitive on purpose: "Heat", "Magic", "Thunder", "Wild" only count as teams when capitalized.
+const wordRegex = (pattern: string) => new RegExp(`(?<![A-Za-z])${pattern}(?![A-Za-z])`);
+
+const matchers: Matcher[] = TEAMS.flatMap((team) =>
+  [team.name, ...(team.aliases ?? [])].flatMap((name) => {
     const ambiguous = (nameCounts.get(name) ?? 0) > 1;
-    const pattern = ambiguous ? `${escape(team.city)} ${escape(name)}` : escape(name);
-    // Case-sensitive on purpose: "Heat", "Magic", "Thunder" only count as teams when capitalized.
-    return { team, regex: new RegExp(`(?<![A-Za-z])${pattern}(?![A-Za-z])`) };
+    const cities = [team.city, ...(team.cityAliases ?? [])];
+    return [
+      // "Winnipeg Jets" — the city settles which team it is.
+      ...cities.map((city) => ({ team, regex: wordRegex(`${escape(city)} ${escape(name)}`), name, ambiguous: false })),
+      // "the Jets" — fine on its own unless another league uses the nickname too.
+      { team, regex: wordRegex(escape(name)), name, ambiguous },
+    ];
   }),
 );
 
-// Hockey teams aren't in the list; remove NHL names that share a nickname with an NFL/NBA/MLB team
-// (otherwise "Winnipeg Jets" would get the New York Jets panel).
+// Words that hint which league a story is about, used to settle a bare shared nickname ("the Jets").
+const LEAGUE_HINTS: Record<League, RegExp> = {
+  NHL: /\b(?:NHL|hockey|puck|goalie|goaltender|power[- ]play|shutout|hat trick|Stanley Cup|period|saves|goals?|skater|ice)\b/gi,
+  NFL: /\b(?:NFL|touchdowns?|quarterback|QB|yards|Super Bowl|receiver|linebacker|cornerback|field goal|sacks?|interception|rushing|passing)\b/gi,
+  NBA: /\b(?:NBA|rebounds|three-pointers?|3-pointers?|dunks?|triple-double|double-double|free throws?)\b/gi,
+  MLB: /\b(?:MLB|innings?|home runs?|homers?|pitcher|pitched|bullpen|World Series|RBIs?|strikeouts?|closer|shortstop|outfielder)\b/gi,
+};
+
+function leagueScores(text: string) {
+  const scores = new Map<League, number>();
+  for (const [league, regex] of Object.entries(LEAGUE_HINTS) as [League, RegExp][]) scores.set(league, text.match(regex)?.length ?? 0);
+  return scores;
+}
+
 function cleanForMatching(text: string) {
-  return text
-    .replace(/Magic Johnson/g, '')
-    .replace(/\b(?:Winnipeg Jets|New York Rangers|NY Rangers|Los Angeles Kings|L\.?A\.? Kings|Florida Panthers)\b/g, '');
+  return text.replace(/Magic Johnson/g, '');
+}
+
+/** All teams a piece of news copy mentions, with the position of their first mention. */
+function findTeams(text: string): { team: Team; index: number }[] {
+  const cleaned = cleanForMatching(text);
+  const found = new Map<string, { team: Team; index: number }>();
+  const ambiguousHits = new Map<string, { index: number; candidates: Team[] }>();
+  for (const matcher of matchers) {
+    const index = cleaned.search(matcher.regex);
+    if (index === -1) continue;
+    if (!matcher.ambiguous) {
+      const existing = found.get(matcher.team.key);
+      if (!existing || index < existing.index) found.set(matcher.team.key, { team: matcher.team, index });
+    } else {
+      const hit = ambiguousHits.get(matcher.name) ?? { index, candidates: [] };
+      hit.candidates.push(matcher.team);
+      ambiguousHits.set(matcher.name, hit);
+    }
+  }
+  // Settle bare shared nicknames: a candidate already named with its city wins; otherwise the
+  // league the story's wording points to; otherwise skip it (better no panel than the wrong one).
+  let scores: Map<League, number> | null = null;
+  for (const { index, candidates } of ambiguousHits.values()) {
+    if (candidates.some((team) => found.has(team.key))) continue;
+    scores ??= leagueScores(cleaned);
+    const ranked = candidates.map((team) => ({ team, score: scores!.get(team.league) ?? 0 })).sort((a, b) => b.score - a.score);
+    if (ranked[0].score > 0 && ranked[0].score > (ranked[1]?.score ?? 0)) found.set(ranked[0].team.key, { team: ranked[0].team, index });
+  }
+  return [...found.values()].sort((a, b) => a.index - b.index);
 }
 
 /** Whether a piece of news copy mentions this team (same rules as detectTeam). */
 export function mentionsTeam(text: string, team: Team) {
-  const cleaned = cleanForMatching(text);
-  return matchers.some((matcher) => matcher.team.key === team.key && matcher.regex.test(cleaned));
+  return findTeams(text).some((hit) => hit.team.key === team.key);
 }
 
 /** First team mentioned in a piece of news copy, if any. */
 export function detectTeam(text: string): Team | null {
-  const cleaned = cleanForMatching(text);
-  let best: { team: Team; index: number } | null = null;
-  for (const { team, regex } of matchers) {
-    const index = cleaned.search(regex);
-    if (index !== -1 && (!best || index < best.index)) best = { team, index };
-  }
-  return best?.team ?? null;
+  return findTeams(text)[0]?.team ?? null;
+}
+
+/** Teams a short name could refer to ("Jets" → NFL and NHL Jets; "Winnipeg Jets" → NHL Jets). */
+export function teamsNamed(name: string): Team[] {
+  const wanted = name.trim().replace(/^the\s+/i, '').toLowerCase();
+  return TEAMS.filter((team) =>
+    [team.name, ...(team.aliases ?? [])].some((alias) =>
+      [alias, ...[team.city, ...(team.cityAliases ?? [])].map((city) => `${city} ${alias}`)].some((full) => full.toLowerCase() === wanted),
+    ),
+  );
 }

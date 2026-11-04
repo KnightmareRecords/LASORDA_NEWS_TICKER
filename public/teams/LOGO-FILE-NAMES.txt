@@ -103,3 +103,37 @@ MLB:
   mlb-tor.png   Toronto Blue Jays
   mlb-wsh.png   Washington Nationals
 
+NHL:
+  nhl-ana.png   Anaheim Ducks
+  nhl-bos.png   Boston Bruins
+  nhl-buf.png   Buffalo Sabres
+  nhl-cgy.png   Calgary Flames
+  nhl-car.png   Carolina Hurricanes
+  nhl-chi.png   Chicago Blackhawks
+  nhl-col.png   Colorado Avalanche
+  nhl-cbj.png   Columbus Blue Jackets
+  nhl-dal.png   Dallas Stars
+  nhl-det.png   Detroit Red Wings
+  nhl-edm.png   Edmonton Oilers
+  nhl-fla.png   Florida Panthers
+  nhl-lak.png   Los Angeles Kings
+  nhl-min.png   Minnesota Wild
+  nhl-mtl.png   Montreal Canadiens
+  nhl-nsh.png   Nashville Predators
+  nhl-njd.png   New Jersey Devils
+  nhl-nyi.png   New York Islanders
+  nhl-nyr.png   New York Rangers
+  nhl-ott.png   Ottawa Senators
+  nhl-phi.png   Philadelphia Flyers
+  nhl-pit.png   Pittsburgh Penguins
+  nhl-sjs.png   San Jose Sharks
+  nhl-sea.png   Seattle Kraken
+  nhl-stl.png   St. Louis Blues
+  nhl-tbl.png   Tampa Bay Lightning
+  nhl-tor.png   Toronto Maple Leafs
+  nhl-uta.png   Utah Mammoth
+  nhl-van.png   Vancouver Canucks
+  nhl-vgk.png   Vegas Golden Knights
+  nhl-wsh.png   Washington Capitals
+  nhl-wpg.png   Winnipeg Jets
+
