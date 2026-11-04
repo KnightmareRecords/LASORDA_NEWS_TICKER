@@ -3,7 +3,10 @@ import { detectTeam } from '@/lib/teams';
 
 export const dynamic = 'force-dynamic';
 const DEFAULT_FEED = 'https://www.espn.com/espn/rss/news';
-const MAX_ITEM_LENGTH = 220;
+// Ticker lines should read in a few seconds. Long summaries are cut to their first sentence,
+// and anything still too long is cut at a word boundary.
+const TARGET_LENGTH = 150;
+const MAX_ITEM_LENGTH = 170;
 
 type Headline = { id: string; text: string; source: string; team: string | null; tag: string | null };
 type CustomRow = { id: number; text: string; placement: 'rotation' | 'next'; team: string | null; tag: string | null };
@@ -25,9 +28,24 @@ function decodeXml(value: string) {
     .trim();
 }
 
-function shorten(text: string) {
+const ABBREVIATIONS = /(?:^|\s)(?:St|Jr|Sr|vs|No|Mr|Dr|Ft|Mt|Jan|Feb|Aug|Sept|Oct|Nov|Dec|[A-Z])\.$/;
+
+function firstSentence(text: string) {
+  const pattern = /[.!?](?=\s+["“A-Z0-9])/g;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(text))) {
+    const sentence = text.slice(0, match.index + 1);
+    if (!ABBREVIATIONS.test(sentence)) return sentence;
+  }
+  return text;
+}
+
+function shorten(fullText: string) {
+  if (fullText.length <= TARGET_LENGTH) return fullText;
+  const sentence = firstSentence(fullText);
+  const text = sentence.length >= 40 ? sentence : fullText;
   if (text.length <= MAX_ITEM_LENGTH) return text;
-  const cut = text.slice(0, MAX_ITEM_LENGTH);
+  const cut = text.slice(0, TARGET_LENGTH);
   return `${cut.slice(0, cut.lastIndexOf(' ')).replace(/[,;:\-–—]+$/, '')}…`;
 }
 

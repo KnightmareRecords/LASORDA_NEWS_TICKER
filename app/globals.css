@@ -122,6 +122,7 @@ button, input { font: inherit; }
   text-transform: uppercase;
   clip-path: polygon(.45em 0, 100% 0, calc(100% - .45em) 100%, 0 100%);
 }
+.ticker-team-logo { height: 1.25em; width: auto; max-width: 2.2em; margin-right: .4em; object-fit: contain; }
 .ticker-tag { border-radius: 3px; background: #d0002a; color: #fff; padding: 5px 8px; font-size: 13px; font-style: normal; font-weight: 800; letter-spacing: .12em; }
 .ticker-item i { width: 5px; height: 5px; margin-left: 14px; border-radius: 50%; background: #607087; }
 .ticker-empty { display: flex; height: 100%; align-items: center; padding-left: 30px; font-size: calc(var(--ticker-size, 25px) * .7); font-weight: 700; letter-spacing: .08em; color: color-mix(in srgb, var(--ticker-text, #fff) 60%, transparent); }

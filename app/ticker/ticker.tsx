@@ -131,7 +131,12 @@ export function Ticker() {
       <span className="ticker-item" key={`${index}-${item.id}`}>
         {item.tag && <em className="ticker-tag">{item.tag}</em>}
         {team ? (
-          <b className="ticker-team" style={{ '--team-bg': colors?.background, '--team-fg': colors?.text } as CSSProperties}>{team.name}</b>
+          <b className="ticker-team" style={{ '--team-bg': colors?.background, '--team-fg': colors?.text } as CSSProperties}>
+            {/* Team logos are files Jay adds to public/teams/<team key>.png; hidden if the file isn't there. */}
+            {/* oxlint-disable-next-line next/no-img-element */}
+            <img className="ticker-team-logo" src={`/teams/${team.key}.png`} alt="" onError={(event) => event.currentTarget.remove()} />
+            {team.name}
+          </b>
         ) : (
           <strong className={item.source === 'LIVE' ? 'source-live' : ''}>{item.source}</strong>
         )}

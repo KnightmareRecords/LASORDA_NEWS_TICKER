@@ -1,0 +1,105 @@
+TEAM LOGOS FOR THE TICKER
+=========================
+
+Put one logo per team in this folder, named exactly as below (PNG with a transparent
+background works best; around 200 pixels tall is plenty). A team without a file just
+shows its name, so you can add only the teams you need. Run DEPLOY.cmd afterwards.
+
+NFL:
+  nfl-ari.png   Arizona Cardinals
+  nfl-atl.png   Atlanta Falcons
+  nfl-bal.png   Baltimore Ravens
+  nfl-buf.png   Buffalo Bills
+  nfl-car.png   Carolina Panthers
+  nfl-chi.png   Chicago Bears
+  nfl-cin.png   Cincinnati Bengals
+  nfl-cle.png   Cleveland Browns
+  nfl-dal.png   Dallas Cowboys
+  nfl-den.png   Denver Broncos
+  nfl-det.png   Detroit Lions
+  nfl-gb.png   Green Bay Packers
+  nfl-hou.png   Houston Texans
+  nfl-ind.png   Indianapolis Colts
+  nfl-jax.png   Jacksonville Jaguars
+  nfl-kc.png   Kansas City Chiefs
+  nfl-lv.png   Las Vegas Raiders
+  nfl-lac.png   Los Angeles Chargers
+  nfl-lar.png   Los Angeles Rams
+  nfl-mia.png   Miami Dolphins
+  nfl-min.png   Minnesota Vikings
+  nfl-ne.png   New England Patriots
+  nfl-no.png   New Orleans Saints
+  nfl-nyg.png   New York Giants
+  nfl-nyj.png   New York Jets
+  nfl-phi.png   Philadelphia Eagles
+  nfl-pit.png   Pittsburgh Steelers
+  nfl-sf.png   San Francisco 49ers
+  nfl-sea.png   Seattle Seahawks
+  nfl-tb.png   Tampa Bay Buccaneers
+  nfl-ten.png   Tennessee Titans
+  nfl-was.png   Washington Commanders
+
+NBA:
+  nba-atl.png   Atlanta Hawks
+  nba-bos.png   Boston Celtics
+  nba-bkn.png   Brooklyn Nets
+  nba-cha.png   Charlotte Hornets
+  nba-chi.png   Chicago Bulls
+  nba-cle.png   Cleveland Cavaliers
+  nba-dal.png   Dallas Mavericks
+  nba-den.png   Denver Nuggets
+  nba-det.png   Detroit Pistons
+  nba-gsw.png   Golden State Warriors
+  nba-hou.png   Houston Rockets
+  nba-ind.png   Indiana Pacers
+  nba-lac.png   LA Clippers
+  nba-lal.png   Los Angeles Lakers
+  nba-mem.png   Memphis Grizzlies
+  nba-mia.png   Miami Heat
+  nba-mil.png   Milwaukee Bucks
+  nba-min.png   Minnesota Timberwolves
+  nba-nop.png   New Orleans Pelicans
+  nba-nyk.png   New York Knicks
+  nba-okc.png   Oklahoma City Thunder
+  nba-orl.png   Orlando Magic
+  nba-phi.png   Philadelphia 76ers
+  nba-phx.png   Phoenix Suns
+  nba-por.png   Portland Trail Blazers
+  nba-sac.png   Sacramento Kings
+  nba-sas.png   San Antonio Spurs
+  nba-tor.png   Toronto Raptors
+  nba-uta.png   Utah Jazz
+  nba-was.png   Washington Wizards
+
+MLB:
+  mlb-ari.png   Arizona Diamondbacks
+  mlb-ath.png   Athletics
+  mlb-atl.png   Atlanta Braves
+  mlb-bal.png   Baltimore Orioles
+  mlb-bos.png   Boston Red Sox
+  mlb-chc.png   Chicago Cubs
+  mlb-cws.png   Chicago White Sox
+  mlb-cin.png   Cincinnati Reds
+  mlb-cle.png   Cleveland Guardians
+  mlb-col.png   Colorado Rockies
+  mlb-det.png   Detroit Tigers
+  mlb-hou.png   Houston Astros
+  mlb-kc.png   Kansas City Royals
+  mlb-laa.png   Los Angeles Angels
+  mlb-lad.png   Los Angeles Dodgers
+  mlb-mia.png   Miami Marlins
+  mlb-mil.png   Milwaukee Brewers
+  mlb-min.png   Minnesota Twins
+  mlb-nym.png   New York Mets
+  mlb-nyy.png   New York Yankees
+  mlb-phi.png   Philadelphia Phillies
+  mlb-pit.png   Pittsburgh Pirates
+  mlb-sd.png   San Diego Padres
+  mlb-sf.png   San Francisco Giants
+  mlb-sea.png   Seattle Mariners
+  mlb-stl.png   St. Louis Cardinals
+  mlb-tb.png   Tampa Bay Rays
+  mlb-tex.png   Texas Rangers
+  mlb-tor.png   Toronto Blue Jays
+  mlb-wsh.png   Washington Nationals
+
