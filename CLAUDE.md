@@ -52,6 +52,7 @@ Note: `compatibility_date` must not be newer than what the installed wrangler su
 - Next feature work: not chosen yet — ask Jay.
 
 ## Change log
+- 2026-11-04: Feed stories with a team panel are spread evenly among generic ones (`lib/mix.ts` `spreadTeamItems`, order kept within each group). Jay set the on-screen label to NEWS.
 - 2026-11-04: AI prompt v2 (story key prefixed `v2:` so old lines are redone): line starts with who + what, normal capitalization, examples; team name stripped from the start when a team panel shows it (`finishLine`); all-lowercase output rejected; AI team pick goes through the same NHL filter (`mentionsTeam`).
 - 2026-11-04: Deployed remotely (migrations 0004+0005 applied). Switched AI to a model list with automatic fallback after llama-3.1-8b-instruct turned out to be retired; NHL names (Winnipeg Jets, NY Rangers, LA Kings, Florida Panthers) no longer trigger NFL/NBA/MLB panels. Added DEPLOY-UNATTENDED.cmd.
 - 2026-11-04: AI short lines via Cloudflare Workers AI, straight to air with safety checks (Jay's choice); on/off switch + status in the control panel. Migration 0005 (`ai_lines`, `ticker_settings.ai_summaries`).

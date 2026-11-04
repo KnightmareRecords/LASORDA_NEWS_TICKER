@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { detectTeam } from '@/lib/teams';
 import { AI_PROMPT_VERSION, summarizeStory } from '@/lib/ai-summary';
+import { spreadTeamItems } from '@/lib/mix';
 
 export const dynamic = 'force-dynamic';
 const DEFAULT_FEED = 'https://www.espn.com/espn/rss/news';
@@ -242,7 +243,7 @@ export async function GET(request: Request) {
 
   // AI line + AI-picked team when it passed the safety checks; otherwise the trimmed story text,
   // with the team panel of the first team the story mentions.
-  const feed: Headline[] = result.items.map((item) => {
+  const feed: Headline[] = spreadTeamItems(result.items.map((item) => {
     const entry = ai?.lines.get(item.id);
     const useAi = entry?.status === 'ok' && entry.line;
     return {
@@ -252,7 +253,7 @@ export async function GET(request: Request) {
       team: (useAi && entry.team) || detectTeam(item.story)?.key || null,
       tag: null,
     };
-  });
+  }));
   const feedAvailable = feed.length > 0;
   const feedError = result.error;
   // True when we're showing saved headlines because the feed site refused the latest request.
