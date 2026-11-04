@@ -67,6 +67,7 @@ export function ControlPanel() {
   const [appearanceSaving, setAppearanceSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [savedSettings, setSavedSettings] = useState<TickerSettings>(defaultSettings);
+  const [feedStatus, setFeedStatus] = useState<{ ok: boolean; count: number; error: string | null } | null>(null);
   const previewRef = useRef<HTMLIFrameElement>(null);
   const settingsRef = useRef(settings);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
@@ -74,7 +75,18 @@ export function ControlPanel() {
   const postToPreview = useCallback((message: object) => {
     previewRef.current?.contentWindow?.postMessage(message, window.location.origin);
   }, []);
+  const checkFeed = useCallback(async () => {
+    try {
+      const response = await fetch('/api/headlines', { cache: 'no-store' });
+      const data = (await response.json()) as { headlines: { source: string }[]; feedAvailable: boolean; feedError?: string | null };
+      setFeedStatus({ ok: data.feedAvailable, count: data.headlines.filter((item) => item.source !== 'LIVE').length, error: data.feedError ?? null });
+    } catch {
+      setFeedStatus(null);
+    }
+  }, []);
   const refreshPreview = useCallback(() => postToPreview({ type: 'ticker-preview:refresh' }), [postToPreview]);
+
+  useEffect(() => void checkFeed(), [checkFeed]);
 
   const load = useCallback(async () => {
     try {
@@ -156,6 +168,7 @@ export function ControlPanel() {
       setSettings(saved);
       setSavedSettings(saved);
       refreshPreview();
+      void checkFeed();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
     } finally {
@@ -370,6 +383,11 @@ export function ControlPanel() {
                 On-screen label
                 <Input id="feed-label" value={settings.feedLabel} maxLength={18} onChange={(event) => setSettings((current) => ({ ...current, feedLabel: event.target.value.toUpperCase() }))} placeholder="SPORTS" className="mt-2 h-10 border-white/10 bg-white/5 text-white" />
               </label>
+              {feedStatus && (feedStatus.ok ? (
+                <p className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs text-emerald-200/80">Feed working — {feedStatus.count} headlines loaded.</p>
+              ) : (
+                <p role="alert" className="mt-3 rounded-lg border border-red-400/25 bg-red-400/10 px-3 py-2 text-xs leading-5 text-red-200">Feed not loading: {feedStatus.error || 'unknown error'} Only your custom headlines are showing.</p>
+              ))}
               <p className="mt-3 text-xs leading-5 text-slate-500">Use a direct feed URL beginning with http:// or https://. Changing feeds does not change your custom headlines.</p>
               <Button disabled={!adminKey || appearanceSaving || !settings.feedUrl.trim()} onClick={saveAppearance} className="mt-4 h-10 w-full bg-[#ffb000] text-black hover:bg-[#ffc13b]">
                 {appearanceSaving ? 'Saving…' : 'Save news feed'}

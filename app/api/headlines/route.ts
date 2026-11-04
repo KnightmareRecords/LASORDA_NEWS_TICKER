@@ -23,10 +23,17 @@ function decodeXml(value: string) {
 
 async function getFeedHeadlines(feedUrl: string, feedLabel: string): Promise<Headline[]> {
   const response = await fetch(feedUrl, {
-    headers: { 'User-Agent': 'OBS-Live-Ticker/1.0' },
+    signal: AbortSignal.timeout(8000),
+    headers: {
+      // Some feeds (Google News) reject unknown bot user agents.
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+      Accept: 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5',
+      'Accept-Language': 'en-US,en;q=0.9',
+    },
   });
-  if (!response.ok) throw new Error(`Feed returned ${response.status}`);
+  if (!response.ok) throw new Error(`The feed site answered with error ${response.status}.`);
   const xml = await response.text();
+  if (!/<(?:rss|feed|rdf:RDF)[\s>]/i.test(xml)) throw new Error('That address did not return an RSS or Atom feed.');
   const entries = [...xml.matchAll(/<(?:item|entry)(?:\s[^>]*)?>([\s\S]*?)<\/(?:item|entry)>/gi)];
   return entries
     .slice(0, 24)
@@ -52,11 +59,13 @@ export async function GET(request: Request) {
 
   let feed: Headline[] = [];
   let feedAvailable = true;
+  let feedError: string | null = null;
   try {
     feed = await getFeedHeadlines(feedUrl, feedLabel);
   } catch (error) {
     console.error('RSS feed fetch failed', error);
     feedAvailable = false;
+    feedError = error instanceof Error && error.name !== 'TimeoutError' ? error.message : 'The feed site did not answer in time.';
   }
 
   const next = custom.filter((item) => item.placement === 'next').map((item) => ({ id: `custom-${item.id}`, text: item.text, source: 'LIVE' as const }));
@@ -74,5 +83,5 @@ export async function GET(request: Request) {
     await env.DB.prepare(`UPDATE custom_headlines SET placement = 'rotation' WHERE id IN (${placeholders})`).bind(...ids).run();
   }
 
-  return Response.json({ headlines: mixed, feedAvailable, feedUrl, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ headlines: mixed, feedAvailable, feedError, feedUrl, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
 }
