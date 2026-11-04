@@ -543,7 +543,7 @@ export function ControlPanel() {
               <h2 className="font-semibold">OBS setup</h2>
               <ol className="mt-4 space-y-3 text-sm leading-6 text-slate-400">
                 <li><span className="mr-2 font-mono text-[#ffb000]">01</span> Add a Browser Source to your scene.</li>
-                <li><span className="mr-2 font-mono text-[#ffb000]">02</span> Use the ticker URL and set width to 1920, height to 120.</li>
+                <li><span className="mr-2 font-mono text-[#ffb000]">02</span> Use the ticker URL and set width to 1920, height to 60. The bar sits at the bottom; a smaller text size makes it slimmer.</li>
                 <li><span className="mr-2 font-mono text-[#ffb000]">03</span> Position it along the bottom edge.</li>
               </ol>
               <div className="mt-5 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-emerald-200/80">The overlay background is transparent. News headlines refresh every 15 minutes; your custom changes reach OBS within 15 seconds.</div>
