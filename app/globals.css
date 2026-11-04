@@ -98,7 +98,7 @@ button, input { font: inherit; }
 .ticker-item strong { color: var(--ticker-accent, #ffb000); font-size: 13px; letter-spacing: .14em; }
 .ticker-item strong.source-live { border-radius: 4px; background: var(--ticker-accent, #ffb000); color: #090c12; padding: 5px 7px; }
 .ticker-item i { width: 5px; height: 5px; margin-left: 14px; border-radius: 50%; background: #607087; }
-.ticker-empty { display: flex; flex: 1; align-items: center; background: color-mix(in srgb, var(--ticker-background, #0a0e16) 97%, transparent); padding-left: 30px; font-weight: 700; letter-spacing: .08em; color: #96a1b2; }
+.ticker-empty { display: flex; height: 100%; align-items: center; padding-left: 30px; font-size: calc(var(--ticker-size, 25px) * .7); font-weight: 700; letter-spacing: .08em; color: color-mix(in srgb, var(--ticker-text, #fff) 60%, transparent); }
 
 @media (max-width: 700px) {
   .ticker-shell { height: 70px; }

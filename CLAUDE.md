@@ -52,6 +52,7 @@ Note: `compatibility_date` must not be newer than what the installed wrangler su
 - Next feature work: not chosen yet — ask Jay.
 
 ## Change log
+- 2026-11-04: Feed requests try an honest RSS-reader User-Agent first, then a browser one (ESPN's bot protection served HTML to the browser UA); non-feed responses reported with status/type/page title. Empty-state ticker uses the normal structure + Jay's colors (fixed white triangle by the badge).
 - 2026-11-04: Ticker shows ESPN story summaries instead of teaser headlines (default feed now ESPN). Fixed deleted custom headlines staying on the ticker (duplicate React keys for repeated rotation items + empty list ignored).
 - 2026-11-04: Feed cached for 15 min with last-good fallback (fixes Google 503s dropping news headlines); control panel shows amber 'saved headlines' status; corrected outdated ESPN wording.
 - 2026-11-04: Admin key errors now say why (wrong key vs no password set on server); key compared trimmed; added SET PASSWORD.cmd.

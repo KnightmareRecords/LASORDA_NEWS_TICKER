@@ -89,8 +89,24 @@ export function Ticker() {
   }, [headlines, view.scrollSpeed, view.fontSize, view.fontFamily]);
 
   if (status === 'loading') return null;
+
+  const shellStyle = {
+    '--ticker-accent': view.accentColor,
+    '--ticker-background': view.backgroundColor,
+    '--ticker-text': view.textColor,
+    '--ticker-font': view.fontFamily === 'Geist' ? 'var(--font-geist-sans)' : view.fontFamily,
+    '--ticker-size': `${view.fontSize}px`,
+    '--ticker-duration': `${scrollDuration}s`,
+  } as CSSProperties;
+
+  // Same structure and colors as the normal ticker, so the badge's slanted edge sits over the strip.
   if (status === 'error' || headlines.length === 0) {
-    return <div className="ticker-shell"><div className="ticker-badge">LIVE</div><div className="ticker-empty">HEADLINES TEMPORARILY UNAVAILABLE</div></div>;
+    return (
+      <main className="ticker-shell" aria-label="Live sports headlines" style={shellStyle}>
+        <div className="ticker-badge"><span className="live-dot" /> LIVE WIRE</div>
+        <div className="ticker-window"><div className="ticker-empty">HEADLINES TEMPORARILY UNAVAILABLE</div></div>
+      </main>
+    );
   }
 
   // A rotation custom headline can appear several times in one strip, so ids aren't unique keys.
@@ -103,18 +119,7 @@ export function Ticker() {
   ));
 
   return (
-    <main
-      className="ticker-shell"
-      aria-label="Live sports headlines"
-      style={{
-        '--ticker-accent': view.accentColor,
-        '--ticker-background': view.backgroundColor,
-        '--ticker-text': view.textColor,
-        '--ticker-font': view.fontFamily === 'Geist' ? 'var(--font-geist-sans)' : view.fontFamily,
-        '--ticker-size': `${view.fontSize}px`,
-        '--ticker-duration': `${scrollDuration}s`,
-      } as CSSProperties}
-    >
+    <main className="ticker-shell" aria-label="Live sports headlines" style={shellStyle}>
       <div className="ticker-badge"><span className="live-dot" /> LIVE WIRE</div>
       <div className="ticker-window">
         <div className="ticker-track">

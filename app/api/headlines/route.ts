@@ -74,19 +74,44 @@ async function getCachedFeed(feedUrl: string) {
   }
 }
 
+const FEED_ACCEPT = 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5';
+// Feed sites disagree on what they let through: some (ESPN's bot protection) block requests that
+// claim to be a browser, others (Google News) dislike unknown bots. Try an honest feed-reader
+// identity first, then a browser one.
+const REQUEST_PROFILES: Record<string, string>[] = [
+  { 'User-Agent': 'Mozilla/5.0 (compatible; LasordaNewsTicker/1.0; RSS reader)', Accept: FEED_ACCEPT },
+  {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+    Accept: FEED_ACCEPT,
+    'Accept-Language': 'en-US,en;q=0.9',
+  },
+];
+
+function isFeed(body: string) {
+  return /<(?:rss|feed|rdf:RDF)[\s>]/i.test(body.slice(0, 4000));
+}
+
+// Short description of a non-feed response, so the control panel can say what actually came back.
+function describeNonFeed(response: Response, body: string) {
+  const type = response.headers.get('content-type')?.split(';')[0] || 'unknown type';
+  const title = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1]?.replace(/\s+/g, ' ').trim().slice(0, 60);
+  return `got ${response.status} ${type}${title ? ` “${title}”` : ''}`;
+}
+
+async function fetchFeedXml(feedUrl: string) {
+  const problems: string[] = [];
+  for (const headers of REQUEST_PROFILES) {
+    const response = await fetch(feedUrl, { signal: AbortSignal.timeout(8000), headers });
+    const body = await response.text();
+    if (response.ok && isFeed(body)) return body;
+    problems.push(response.ok ? describeNonFeed(response, body) : `error ${response.status}`);
+  }
+  const unique = [...new Set(problems)].join(', then ');
+  throw new Error(`The feed site didn’t send a feed (${unique}).`);
+}
+
 async function getFeedHeadlines(feedUrl: string): Promise<FeedItem[]> {
-  const response = await fetch(feedUrl, {
-    signal: AbortSignal.timeout(8000),
-    headers: {
-      // Some feeds (Google News) reject unknown bot user agents.
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
-      Accept: 'application/rss+xml, application/atom+xml, application/xml;q=0.9, text/xml;q=0.9, */*;q=0.5',
-      'Accept-Language': 'en-US,en;q=0.9',
-    },
-  });
-  if (!response.ok) throw new Error(`The feed site answered with error ${response.status}.`);
-  const xml = await response.text();
-  if (!/<(?:rss|feed|rdf:RDF)[\s>]/i.test(xml)) throw new Error('That address did not return an RSS or Atom feed.');
+  const xml = await fetchFeedXml(feedUrl);
   const entries = [...xml.matchAll(/<(?:item|entry)(?:\s[^>]*)?>([\s\S]*?)<\/(?:item|entry)>/gi)];
   return entries
     .slice(0, 24)
