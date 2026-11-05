@@ -54,6 +54,7 @@ Note: `compatibility_date` must not be newer than what the installed wrangler su
 - Next feature work: not chosen yet — ask Jay.
 
 ## Change log
+- 2026-11-05: Logo block gets more light space on its left (padding 6→14px, badge +8px so the logo keeps its size). New "Lasorda Logo" choice at the top of the custom-headline Team panel list (key `lasorda`, `HOUSE_PANEL_KEY`): shows `public/brand/lasordas-card-house-secondary.png` (light-gray, transparent; Jay adds the file) instead of a team panel; never auto-detected on feed stories.
 - 2026-11-05: Deployed 1914573 + 8112ee2 from the office Mac (version c3270ab2; live = 49bc463 main). Mac set up: Node 26, wrangler logged in. Mac folder re-cloned with GitHub Desktop (was a ZIP copy).
 - 2026-11-05: Added `DEPLOY.command` (Mac double-click deploy, mirrors `DEPLOY.cmd`). Still pending deploy: 1914573 + 8112ee2 (live = 45f02e4). Claude Code cloud sessions can't reach workers.dev/Cloudflare (proxy 403), so deploys still run on Jay's computer.
 - 2026-11-04: Added HANDOFF.md for continuing in Claude Code on the office Mac. Live = 45f02e4; 1914573 + 8112ee2 still to deploy.

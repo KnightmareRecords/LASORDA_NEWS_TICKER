@@ -3,7 +3,8 @@ TEAM LOGOS FOR THE TICKER
 
 Put one logo per team in this folder, named exactly as below (PNG with a transparent
 background works best; around 200 pixels tall is plenty). A team without a file just
-shows its name, so you can add only the teams you need. Run DEPLOY.cmd afterwards.
+shows its name, so you can add only the teams you need. Run DEPLOY.cmd (Windows) or
+DEPLOY.command (Mac) afterwards.
 
 NFL:
   nfl-ari.png   Arizona Cardinals

@@ -1,8 +1,8 @@
-import { TEAMS_BY_KEY } from './teams';
+import { HOUSE_PANEL_KEY, TEAMS_BY_KEY } from './teams';
 
-/** A valid team key from lib/teams.ts, or null. */
+/** A valid team key from lib/teams.ts (or the Lasorda Logo panel), or null. */
 export function cleanTeam(value: unknown) {
-  return typeof value === 'string' && TEAMS_BY_KEY.has(value) ? value : null;
+  return typeof value === 'string' && (value === HOUSE_PANEL_KEY || TEAMS_BY_KEY.has(value)) ? value : null;
 }
 
 /** Tag text shown before a headline (e.g. DEVELOPING STORY): uppercase, max 24 chars, or null. */

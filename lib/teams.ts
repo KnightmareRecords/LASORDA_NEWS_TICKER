@@ -160,6 +160,13 @@ export const TEAMS: Team[] = [
 
 export const TEAMS_BY_KEY = new Map(TEAMS.map((team) => [team.key, team]));
 
+/**
+ * "Lasorda Logo" panel for custom headlines: shows Jay's secondary logo instead of a team.
+ * Not a team, so it is never auto-detected in news stories.
+ */
+export const HOUSE_PANEL_KEY = 'lasorda';
+export const HOUSE_PANEL_LOGO = '/brand/lasordas-card-house-secondary.png';
+
 function luminance(hex: string) {
   const channel = (offset: number) => {
     const value = Number.parseInt(hex.slice(offset, offset + 2), 16) / 255;
