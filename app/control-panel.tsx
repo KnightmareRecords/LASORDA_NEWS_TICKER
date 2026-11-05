@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { ArrowDown, ArrowUp, Check, Copy, Download, ExternalLink, Eye, Image as ImageIcon, Megaphone, MonitorPlay, Palette, Plus, Radio, RefreshCw, Repeat, SkipForward, Sparkles, Trash2, Trophy, Upload, Zap } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Copy, Download, ExternalLink, Eye, Image as ImageIcon, Megaphone, MonitorPlay, Palette, Plus, Radio, RefreshCw, Repeat, SkipForward, Smartphone, Sparkles, Trash2, Trophy, Upload, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -453,6 +453,9 @@ export function ControlPanel() {
             )}
             <Button variant="outline" className="border-white/15 bg-white/5 text-white hover:bg-white/10" onClick={copyTickerUrl}>
               {copied ? <Check /> : <Copy />} {copied ? 'Copied' : 'Copy OBS URL'}
+            </Button>
+            <Button variant="outline" title="Open this on your phone to see the ticker at the size stream viewers see it" className="border-white/15 bg-white/5 text-white hover:bg-white/10" onClick={() => window.open('/phone', '_blank')}>
+              <Smartphone /> Phone view
             </Button>
             <Button className="bg-[#ffb000] text-black hover:bg-[#ffc13b]" onClick={() => window.open('/ticker?preview=1', '_blank')}>
               Preview ticker <ExternalLink />
