@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { detectTeam, isCollegeLink, TEAMS_BY_KEY, type StoryContext } from '@/lib/teams';
 import { AI_PROMPT_VERSION, summarizeStory } from '@/lib/ai-summary';
+import { feedName, mixFeeds, parseFeedList, PER_FEED_WHEN_MIXED, SINGLE_FEED_LIMIT } from '@/lib/feeds';
 import { mixHeadlines, spreadTeamItems } from '@/lib/mix';
 import { isFeatureStory } from '@/lib/news-filter';
 
@@ -184,6 +185,16 @@ const aiInFlight = new Set<string>();
 let aiPausedUntil = 0;
 let aiLastError: string | null = null;
 
+/**
+ * What the AI reads: the headline plus the summary. Many feeds (NBC, Yahoo) write summaries that
+ * assume you just read the headline ("It was the latest four-goal comeback in NHL history."), so the
+ * summary alone often doesn't say who the story is about. The safety checks use this same text.
+ */
+function aiText(item: FeedItem) {
+  const title = item.title.trim();
+  return title && !item.story.startsWith(title) ? `${title}. ${item.story}` : item.story;
+}
+
 function storyKey(item: FeedItem) {
   let hash = 0x811c9dc5;
   for (let index = 0; index < item.story.length; index++) hash = Math.imul(hash ^ item.story.charCodeAt(index), 0x01000193);
@@ -219,7 +230,7 @@ async function getAiLines(items: FeedItem[]) {
       const key = storyKey(item);
       aiInFlight.add(key);
       try {
-        const outcome = await withTimeout(summarizeStory(ai as never, item.story, storyContext(item)), AI_TIMEOUT_MS);
+        const outcome = await withTimeout(summarizeStory(ai as never, aiText(item), storyContext(item)), AI_TIMEOUT_MS);
         const entry: AiEntry = outcome.status === 'ok'
           ? { status: 'ok', line: outcome.result.line, team: outcome.result.team }
           : { status: outcome.status, line: null, team: null };
@@ -264,10 +275,23 @@ export async function GET(request: Request) {
   const feedSettings = await env.DB.prepare(
     'SELECT feed_url AS feedUrl, feed_label AS feedLabel, ai_summaries AS aiSummaries FROM ticker_settings WHERE id = 1',
   ).first<FeedSettings>();
-  const feedUrl = feedSettings?.feedUrl || DEFAULT_FEED;
+  // Several feeds (one per line in the setting) are fetched in parallel, each with its own cache,
+  // and mixed: turns between feeds, same story from two sites only once (lib/feeds.ts).
+  const feedUrls = parseFeedList(feedSettings?.feedUrl);
+  if (feedUrls.length === 0) feedUrls.push(DEFAULT_FEED);
+  const feedUrl = feedUrls[0];
   const feedLabel = feedSettings?.feedLabel || 'SPORTS';
 
-  const result = await getCachedFeed(feedUrl);
+  const results = await Promise.all(feedUrls.map((url) => getCachedFeed(url)));
+  const allItems = mixFeeds(results.map((result) => result.items), feedUrls.length > 1 ? PER_FEED_WHEN_MIXED : SINGLE_FEED_LIMIT);
+  const failed = results.flatMap((result, index) => (result.error ? [`${feedName(feedUrls[index])}: ${result.error}`] : []));
+  const result = {
+    items: allItems,
+    // One feed failing while others work is reported, but the strip keeps going with the rest.
+    error: failed.length ? failed.join(' · ') : null,
+    ageMs: Math.max(0, ...results.map((entry) => entry.ageMs)),
+  };
+  const feeds = results.map((entry, index) => ({ url: feedUrls[index], name: feedName(feedUrls[index]), stories: entry.items.length, error: entry.error, ageSeconds: Math.round(entry.ageMs / 1000) }));
   const aiEnabled = feedSettings?.aiSummaries !== 0;
   // Drop feature-style stories (rankings, previews, analysis) by wording first — no AI needed.
   // The headline is checked too: ESPN's teaser headlines often give a feature away.
@@ -321,5 +345,5 @@ export async function GET(request: Request) {
     await env.DB.prepare(`UPDATE custom_headlines SET placement = 'rotation' WHERE id IN (${placeholders})`).bind(...ids).run();
   }
 
-  return Response.json({ headlines: mixed, feedAvailable, feedError, feedStale, feedAgeSeconds, feedUrl, ai: ai ? { ...ai.stats, skipped: skippedByRules + ai.stats.features } : { off: !aiEnabled, error: aiError, skipped: skippedByRules }, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ headlines: mixed, feedAvailable, feedError, feedStale, feedAgeSeconds, feedUrl, feedUrls, feeds, ai: ai ? { ...ai.stats, skipped: skippedByRules + ai.stats.features } : { off: !aiEnabled, error: aiError, skipped: skippedByRules }, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
 }

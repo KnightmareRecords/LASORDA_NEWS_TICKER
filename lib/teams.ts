@@ -296,6 +296,20 @@ function cleanForMatching(text: string) {
   return text.replace(/Magic Johnson/g, '');
 }
 
+// A team named right after these words is the opponent ("out vs. Bills", "lifts Jets past Canadiens"),
+// not who the story is about, so it never becomes the panel. ("at"/"to" are not here: "at Eagles
+// facility", "traded to Ravens".)
+const OPPONENT_BEFORE = /(?:\bvs\.?|\bversus|\bagainst|\bover|\bpast|\bbeat(?:s|ing)?|\bdefeat(?:s|ed|ing)?)\s+(?:the\s+)?$/i;
+const isOpponentMention = (text: string, index: number) => OPPONENT_BEFORE.test(text.slice(Math.max(0, index - 16), index));
+
+/** Position of the first mention that isn't an opponent mention, or -1. */
+function firstMention(text: string, regex: RegExp) {
+  for (const match of text.matchAll(new RegExp(regex.source, regex.flags.includes('g') ? regex.flags : `${regex.flags}g`))) {
+    if (!isOpponentMention(text, match.index)) return match.index;
+  }
+  return -1;
+}
+
 /** All teams a piece of news copy mentions, with the position of their first mention. */
 function findTeams(text: string, context: StoryContext = {}): { team: Team; index: number }[] {
   const cleaned = cleanForMatching(text);
@@ -309,7 +323,7 @@ function findTeams(text: string, context: StoryContext = {}): { team: Team; inde
   // pass below can't read the "Miami" in "Miami Dolphins" as the Hurricanes.
   let masked = cleaned;
   for (const matcher of matchers) {
-    const index = cleaned.search(matcher.regex);
+    const index = firstMention(cleaned, matcher.regex);
     if (index === -1) continue;
     if (matcher.full) {
       masked = masked.replace(new RegExp(matcher.regex.source, 'g'), (hit) => ' '.repeat(hit.length));
@@ -326,7 +340,7 @@ function findTeams(text: string, context: StoryContext = {}): { team: Team; inde
   if (context.college) {
     for (const { team, regex } of schoolMatchers) {
       masked = masked.replace(regex, (hit, offset: number) => {
-        add(team, offset);
+        if (!isOpponentMention(masked, offset)) add(team, offset);
         return ' '.repeat(hit.length);
       });
     }

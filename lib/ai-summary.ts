@@ -5,7 +5,8 @@
 import { detectTeam, mentionsTeam, teamsNamed, TEAMS_BY_KEY, type StoryContext, type Team } from './teams';
 
 /** Bump when the prompt changes so stories get rewritten with the new instructions. */
-export const AI_PROMPT_VERSION = 8;
+// v9: the AI reads headline + summary (headlines/route.ts aiText).
+export const AI_PROMPT_VERSION = 9;
 
 // Tried in order. Cloudflare retires models from time to time (llama-3.1-8b-instruct was retired
 // 2026-05-30), so if one is gone the next is used automatically. No OpenAI models (Jay's rule).
@@ -68,7 +69,7 @@ LINE: Devin Vassell has become the Spurs' veteran presence
 
 Reply in exactly this format and nothing else:
 KIND: <NEWS or FEATURE>
-TEAM: <nickname of the NFL, NBA, MLB, NHL or major college team the story is mainly about, or NONE>
+TEAM: <nickname of the NFL, NBA, MLB, NHL or major college team the story is mainly about — the team the player or subject belongs to, NEVER the opponent they play against. If the story does not say which team that is, NONE>
 LINE: <the ticker line>`;
 
 export type AiResult = { line: string; team: string | null };

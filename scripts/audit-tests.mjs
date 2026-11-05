@@ -186,3 +186,37 @@ await test('college stories get college teams; lines without a panel still say w
   await summarizeStory(fine, liv, {});
   assert.equal(fine.calls.length, 1);
 });
+
+const { parseFeedList, joinFeedList, mixFeeds, sameStory, MAX_FEEDS } = await source('lib/feeds.ts');
+
+await test('several feeds are mixed by turns, duplicates across sites air once', () => {
+  // Old single-address setting still works; blank lines and repeats are dropped; capped.
+  assert.deepEqual(parseFeedList('https://www.espn.com/espn/rss/news'), ['https://www.espn.com/espn/rss/news']);
+  assert.deepEqual(parseFeedList(' https://a.com/rss \n\nhttps://b.com/rss\r\nhttps://a.com/rss '), ['https://a.com/rss', 'https://b.com/rss']);
+  assert.equal(parseFeedList(Array.from({ length: 12 }, (_, i) => `https://f${i}.com/rss`).join('\n')).length, MAX_FEEDS);
+  assert.equal(joinFeedList(['https://a.com/rss', '', 'https://b.com/rss']), 'https://a.com/rss\nhttps://b.com/rss');
+
+  // The same story syndicated by two sites; different stories about the same player are kept.
+  assert.equal(sameStory('An investigation regarding the Jalen Hurts situation has not begun', 'Investigation regarding Jalen Hurts situation has not begun, per report'), true);
+  assert.equal(sameStory('Kyler Murray out Monday with hamstring injury', 'Vikings to start Carson Wentz against Bills'), false);
+  assert.equal(sameStory('Kyler Murray out Monday with hamstring injury', 'Kyler Murray throws for 300 yards in win'), false);
+
+  const nfl = [{ id: 'n1', title: 'Kyler Murray out Monday with hamstring injury' }, { id: 'n2', title: 'Rams sign K Joshua Karty to 53-man roster' }];
+  const nba = [{ id: 'b1', title: 'Victor Wembanyama posts 52 points' }, { id: 'b2', title: 'Kyler Murray ruled out Monday with hamstring injury' }];
+  const nhl = [{ id: 'h1', title: 'Samberg lifts Jets past Canadiens in overtime' }];
+  // Takes turns between feeds; the second Murray story (other site) is dropped.
+  assert.deepEqual(mixFeeds([nfl, nba, nhl], 12).map((item) => item.id), ['n1', 'b1', 'h1', 'n2']);
+  // Per-feed limit applies before mixing.
+  assert.deepEqual(mixFeeds([nfl, nba, nhl], 1).map((item) => item.id), ['n1', 'b1', 'h1']);
+});
+
+const { detectTeam } = await source('lib/teams.ts');
+
+await test('a team named as the opponent never becomes the panel', () => {
+  const key = (text, context) => detectTeam(text, context)?.key ?? null;
+  assert.equal(key('Kyler Murray out for Monday vs. Bills, week-to-week with hamstring injury'), null);
+  assert.equal(key('Samberg lifts Jets past Canadiens 5-4 with OT goal'), 'nhl-wpg');
+  assert.equal(key('Bills beat Jets 30-10'), 'nfl-buf');
+  assert.equal(key('Hurts makes appearance at Eagles facility'), 'nfl-phi');
+  assert.equal(key('Miami star Toney out against Notre Dame', { college: true }), 'ncaa-um');
+});

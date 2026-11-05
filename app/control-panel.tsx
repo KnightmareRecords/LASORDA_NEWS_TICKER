@@ -8,6 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import type { Promo } from '@/lib/promos';
+import { MAX_FEEDS, RECOMMENDED_FEEDS } from '@/lib/feeds';
 import { HOUSE_PANEL_KEY, panelColors, teamFullName, teamLabel, TEAMS, TEAMS_BY_KEY, type TeamLeague } from '@/lib/teams';
 
 const TAG_SUGGESTIONS = ['BREAKING', 'DEVELOPING STORY', 'BREAK ALERT', 'NEW DROP', 'GIVEAWAY', 'FINAL'];
@@ -54,6 +55,9 @@ type TickerSettings = {
 };
 
 type ScoresStatus = { live: number; final: number; upcoming: number; leaguesDown: string[] };
+
+/** One news feed's status from /api/headlines. */
+type FeedState = { url: string; name: string; stories: number; error: string | null };
 
 type AiStats = { off?: boolean; available?: boolean; ok?: number; rejected?: number; waiting?: number; skipped?: number; error?: string | null };
 
@@ -108,7 +112,7 @@ export function ControlPanel() {
   const [appearanceSaving, setAppearanceSaving] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [savedSettings, setSavedSettings] = useState<TickerSettings>(defaultSettings);
-  const [feedStatus, setFeedStatus] = useState<{ ok: boolean; stale: boolean; ageMinutes: number; count: number; error: string | null; ai: AiStats | null } | null>(null);
+  const [feedStatus, setFeedStatus] = useState<{ ok: boolean; stale: boolean; ageMinutes: number; count: number; error: string | null; ai: AiStats | null; feeds: FeedState[] } | null>(null);
   const previewRef = useRef<HTMLIFrameElement>(null);
   const settingsRef = useRef(settings);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
@@ -124,7 +128,7 @@ export function ControlPanel() {
   const checkFeed = useCallback(async () => {
     try {
       const response = await fetch('/api/headlines', { cache: 'no-store' });
-      const data = (await response.json()) as { headlines: { source: string }[]; feedAvailable: boolean; feedError?: string | null; feedStale?: boolean; feedAgeSeconds?: number; ai?: AiStats };
+      const data = (await response.json()) as { headlines: { source: string }[]; feedAvailable: boolean; feedError?: string | null; feedStale?: boolean; feedAgeSeconds?: number; ai?: AiStats; feeds?: FeedState[] };
       setFeedStatus({
         ok: data.feedAvailable,
         stale: Boolean(data.feedStale),
@@ -132,6 +136,7 @@ export function ControlPanel() {
         count: data.headlines.filter((item) => item.source !== 'LIVE').length,
         error: data.feedError ?? null,
         ai: data.ai ?? null,
+        feeds: Array.isArray(data.feeds) ? data.feeds : [],
       });
     } catch {
       setFeedStatus(null);
@@ -432,6 +437,12 @@ export function ControlPanel() {
 
   const showPromoInPreview = (promo: Promo) => postToPreview({ type: 'ticker-preview:promo', promo });
 
+  // News feeds: the setting holds one address per line; edited here as a list.
+  const feedLines = settings.feedUrl.split('\n');
+  const setFeedLines = (lines: string[]) => setSettings((current) => ({ ...current, feedUrl: lines.join('\n') }));
+  const hasFeed = feedLines.some((line) => line.trim());
+  const usingRecommended = RECOMMENDED_FEEDS.every((feed) => feedLines.map((line) => line.trim()).includes(feed.url)) && feedLines.filter((line) => line.trim()).length === RECOMMENDED_FEEDS.length;
+
   async function copyTickerUrl() {
     await navigator.clipboard.writeText(`${window.location.origin}/ticker`);
     setCopied(true);
@@ -655,10 +666,37 @@ export function ControlPanel() {
                 <Radio className="size-4 text-[#ffb000]" />
                 <h2 className="font-semibold">News feed</h2>
               </div>
-              <label htmlFor="feed-url" className="text-xs font-medium text-slate-400">
-                RSS or Atom URL
-                <Input id="feed-url" type="url" value={settings.feedUrl} onChange={(event) => setSettings((current) => ({ ...current, feedUrl: event.target.value }))} className="mt-2 h-10 border-white/10 bg-white/5 text-white" />
-              </label>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-slate-400">Feeds (mixed)</span>
+                <Button type="button" size="sm" variant="ghost" disabled={usingRecommended} title="One clean news feed per sport: NFL, NBA, MLB, NHL, college football and basketball" className="h-7 px-2 text-xs text-[#ffb000] hover:bg-white/10 hover:text-[#ffc13b]" onClick={() => setFeedLines(RECOMMENDED_FEEDS.map((feed) => feed.url))}>
+                  {usingRecommended ? 'Using recommended mix' : 'Use recommended mix'}
+                </Button>
+              </div>
+              <div className="mt-2 space-y-2">
+                {feedLines.map((line, index) => {
+                  const known = RECOMMENDED_FEEDS.find((feed) => feed.url === line.trim());
+                  const state = feedStatus?.feeds.find((feed) => feed.url === line.trim());
+                  return (
+                    <div key={index}>
+                      <div className="flex items-center gap-1.5">
+                        <Input aria-label={`Feed ${index + 1}`} type="url" value={line} placeholder="https://…" onChange={(event) => setFeedLines(feedLines.map((item, position) => (position === index ? event.target.value : item)))} className="h-9 border-white/10 bg-white/5 text-xs text-white" />
+                        <Button type="button" aria-label={`Remove feed ${index + 1}`} size="icon-sm" variant="ghost" disabled={feedLines.length === 1} className="text-slate-500 hover:bg-red-400/10 hover:text-red-300" onClick={() => setFeedLines(feedLines.filter((_item, position) => position !== index))}><Trash2 /></Button>
+                      </div>
+                      {(known || state) && (
+                        <p className={`mt-0.5 pl-1 text-[11px] ${state?.error ? 'text-red-300' : 'text-slate-500'}`}>
+                          {known?.name ?? state?.name}
+                          {state && (state.error ? ` — not loading: ${state.error}` : ` — ${state.stories} stories`)}
+                        </p>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              {feedLines.length < MAX_FEEDS && (
+                <Button type="button" size="sm" variant="ghost" className="mt-1 h-7 px-2 text-xs text-slate-400 hover:bg-white/10 hover:text-white" onClick={() => setFeedLines([...feedLines, ''])}>
+                  <Plus /> Add feed
+                </Button>
+              )}
               <label htmlFor="feed-label" className="mt-4 block text-xs font-medium text-slate-400">
                 On-screen label
                 <Input id="feed-label" value={settings.feedLabel} maxLength={18} onChange={(event) => setSettings((current) => ({ ...current, feedLabel: event.target.value.toUpperCase() }))} placeholder="SPORTS" className="mt-2 h-10 border-white/10 bg-white/5 text-white" />
@@ -675,7 +713,7 @@ export function ControlPanel() {
                   <span className="flex items-center gap-2"><Sparkles className="size-4 text-[#ffb000]" /> AI short lines</span>
                   <Switch checked={settings.aiSummaries} onCheckedChange={(checked) => setSettings((current) => ({ ...current, aiSummaries: checked }))} />
                 </label>
-                <p className="mt-1.5 text-xs leading-5 text-slate-500">Rewrites each story into one short line. Lines with any number or name that isn’t in the original story are thrown out and the original text airs instead. Turn off and save to air ESPN’s text as-is.</p>
+                <p className="mt-1.5 text-xs leading-5 text-slate-500">Rewrites each story into one short line. Lines with any number or name that isn’t in the original story are thrown out and the original text airs instead. Turn off and save to air the feeds’ own text as-is.</p>
                 {settings.aiSummaries && feedStatus?.ai && !feedStatus.ai.off && (
                   <p className="mt-2 text-xs leading-5 text-slate-300">
                     {feedStatus.ai.available === false
@@ -686,9 +724,9 @@ export function ControlPanel() {
                   </p>
                 )}
               </div>
-              <p className="mt-3 text-xs leading-5 text-slate-500">Use a direct feed URL beginning with http:// or https://. Changing feeds does not change your custom headlines.</p>
-              <Button disabled={!adminKey || appearanceSaving || !settings.feedUrl.trim()} onClick={saveAppearance} className="mt-4 h-10 w-full bg-[#ffb000] text-black hover:bg-[#ffc13b]">
-                {appearanceSaving ? 'Saving…' : 'Save news feed'}
+              <p className="mt-3 text-xs leading-5 text-slate-500">Stories take turns between feeds (so sports are spread out); the same story from two sites airs once. Each feed adds its newest 12 stories. A feed that stops working is skipped while the others keep going. Changing feeds does not change your custom headlines.</p>
+              <Button disabled={!adminKey || appearanceSaving || !hasFeed} onClick={saveAppearance} className="mt-4 h-10 w-full bg-[#ffb000] text-black hover:bg-[#ffc13b]">
+                {appearanceSaving ? 'Saving…' : 'Save news feeds'}
               </Button>
             </section>
 

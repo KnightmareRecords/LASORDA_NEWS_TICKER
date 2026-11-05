@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { isAdmin, unauthorized } from '@/lib/admin-auth';
+import { joinFeedList, MAX_FEEDS, parseFeedList } from '@/lib/feeds';
 import { readJsonObject } from '@/lib/request-body';
 
 export const dynamic = 'force-dynamic';
@@ -53,8 +54,15 @@ export async function GET() {
 export async function PATCH(request: Request) {
   if (!isAdmin(request)) return unauthorized();
   const body = await readJsonObject(request);
-  if (!isSafeFeedUrl(body.feedUrl)) {
-    return Response.json({ error: 'Enter a valid public RSS or Atom URL.' }, { status: 400 });
+  // feedUrl holds one or more feed addresses, one per line (lib/feeds.ts).
+  const feedUrls = typeof body.feedUrl === 'string' ? parseFeedList(body.feedUrl) : [];
+  const isSafe = (url: string): boolean => isSafeFeedUrl(url);
+  const badFeed = feedUrls.find((url) => !isSafe(url));
+  if (feedUrls.length === 0 || badFeed) {
+    return Response.json({ error: badFeed ? `This isn't a valid public RSS or Atom address: ${badFeed.slice(0, 80)}` : 'Add at least one RSS or Atom feed address.' }, { status: 400 });
+  }
+  if (typeof body.feedUrl === 'string' && body.feedUrl.split(/[\r\n]+/).filter((line) => line.trim()).length > MAX_FEEDS) {
+    return Response.json({ error: `Use at most ${MAX_FEEDS} feeds.` }, { status: 400 });
   }
   const settings = {
     accentColor: isHex(body.accentColor) ? body.accentColor : defaults.accentColor,
@@ -63,7 +71,7 @@ export async function PATCH(request: Request) {
     fontFamily: typeof body.fontFamily === 'string' && fonts.includes(body.fontFamily) ? body.fontFamily : defaults.fontFamily,
     fontSize: typeof body.fontSize === 'number' && body.fontSize >= 18 && body.fontSize <= 36 ? Math.round(body.fontSize) : defaults.fontSize,
     scrollSpeed: typeof body.scrollSpeed === 'number' && body.scrollSpeed >= 30 && body.scrollSpeed <= 180 ? Math.round(body.scrollSpeed) : defaults.scrollSpeed,
-    feedUrl: body.feedUrl,
+    feedUrl: joinFeedList(feedUrls),
     feedLabel: typeof body.feedLabel === 'string' && body.feedLabel.trim() ? body.feedLabel.trim().slice(0, 18).toUpperCase() : defaults.feedLabel,
     aiSummaries: typeof body.aiSummaries === 'boolean' ? body.aiSummaries : defaults.aiSummaries,
     segmentSeconds: inRange(body.segmentSeconds, 30, 900) ? Math.round(body.segmentSeconds) : defaults.segmentSeconds,
