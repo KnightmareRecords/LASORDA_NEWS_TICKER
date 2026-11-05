@@ -33,7 +33,7 @@ Explorer. No database migrations are pending (0000–0005 are all applied remote
 2. `npx wrangler login`. This is a one-time Cloudflare sign-in per computer; Jay signs in himself
    in the browser.
 3. Optionally run it locally: `npm run db:migrate:local`, then `npm run dev` →
-   http://localhost:5173 (admin key `local`; the AI is skipped locally).
+   http://localhost:3000 (admin key `local`; the AI is skipped locally).
 4. Add a Mac double-click deploy script, `DEPLOY.command`, mirroring `DEPLOY.cmd`:
    `npm run db:migrate:remote && npm run deploy`. Run `chmod +x` on it.
 5. Deploy the two pending commits above, then verify:

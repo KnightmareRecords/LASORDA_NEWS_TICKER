@@ -547,7 +547,7 @@ export function ControlPanel() {
               <h2 className="font-semibold">OBS setup</h2>
               <ol className="mt-4 space-y-3 text-sm leading-6 text-slate-400">
                 <li><span className="mr-2 font-mono text-[#ffb000]">01</span> Add a Browser Source to your scene.</li>
-                <li><span className="mr-2 font-mono text-[#ffb000]">02</span> Use the ticker URL and set width to 1920, height to 60. The bar sits at the bottom; a smaller text size makes it slimmer.</li>
+                <li><span className="mr-2 font-mono text-[#ffb000]">02</span> Use the ticker URL and set width to 1920, height to 60. The bar sits in the middle of the source, so drag the source wherever you want it on screen. A smaller text size makes it slimmer.</li>
                 <li><span className="mr-2 font-mono text-[#ffb000]">03</span> Position it along the bottom edge.</li>
               </ol>
               <div className="mt-5 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-emerald-200/80">The overlay background is transparent. News headlines refresh every 15 minutes; your custom changes reach OBS within 15 seconds.</div>
@@ -565,7 +565,7 @@ export function ControlPanel() {
 
 const STAGE_WIDTH = 1920;
 const STAGE_HEIGHT = 1080;
-// Show only the lower part of the 1080p frame (where the ticker lives) so the preview stays compact.
+// Show only the middle band of the 1080p frame (where the ticker lives) so the preview stays compact.
 const VISIBLE_HEIGHT = 360;
 
 function PreviewStage({ frameRef, unsaved, feedChanged }: { frameRef: RefObject<HTMLIFrameElement | null>; unsaved: boolean; feedChanged: boolean }) {
@@ -587,7 +587,7 @@ function PreviewStage({ frameRef, unsaved, feedChanged }: { frameRef: RefObject<
         <div className="flex items-center gap-2">
           <MonitorPlay className="size-4 text-[#ffb000]" />
           <h2 className="font-semibold">Live preview</h2>
-          <span className="text-xs text-slate-500">bottom of a 1920 × 1080 stream</span>
+          <span className="text-xs text-slate-500">middle of a 1920 × 1080 stream</span>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {unsaved ? (
@@ -606,8 +606,8 @@ function PreviewStage({ frameRef, unsaved, feedChanged }: { frameRef: RefObject<
           src="/ticker?preview=1"
           width={STAGE_WIDTH}
           height={STAGE_HEIGHT}
-          className="absolute bottom-0 left-0 origin-bottom-left border-0 bg-transparent"
-          style={{ transform: `scale(${scale})` }}
+          className="absolute left-0 top-0 origin-top-left border-0 bg-transparent"
+          style={{ transform: `translateY(${(-(STAGE_HEIGHT - VISIBLE_HEIGHT) / 2) * scale}px) scale(${scale})` }}
         />
       </div>
       <p className="px-5 py-3 text-xs text-slate-500">Preview never uses up your “front once” headlines — only the OBS source does.</p>
