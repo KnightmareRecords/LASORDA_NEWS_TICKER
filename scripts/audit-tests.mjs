@@ -162,3 +162,27 @@ await test('AI lines never open with the team already shown on the panel', async
   await summarizeStory(once, story);
   assert.equal(once.calls.length, 1);
 });
+
+await test('college stories get college teams; lines without a panel still say who', async () => {
+  const fakeAi = (replies) => {
+    const calls = [];
+    return { calls, run: async (_model, input) => { calls.push(input.messages); return { response: replies[calls.length - 1] }; } };
+  };
+  // ESPN college story: the AI says "Hurricanes" -> Miami (UM), never Carolina's NHL team.
+  const toney = "Notre Dame is preparing for multiple scenarios for Saturday's showdown with Miami following news of an ankle injury to Hurricanes star receiver Malachi Toney.";
+  const college = await summarizeStory(fakeAi(['KIND: NEWS\nTEAM: Hurricanes\nLINE: Malachi Toney injured ankle']), toney, { college: true });
+  assert.equal(college.status === 'ok' && college.result.team, 'ncaa-um');
+  const hockey = await summarizeStory(fakeAi(['KIND: NEWS\nTEAM: Hurricanes\nLINE: Seth Jarvis scores twice in win over Rangers']), 'Seth Jarvis scored twice as the Carolina Hurricanes beat the New York Rangers.', {});
+  assert.equal(hockey.status === 'ok' && hockey.result.team, 'nhl-car');
+
+  // No panel for LIV Golf: a line without the subject is reworded once to name it.
+  const liv = "LIV Golf confirmed it is winding down operations after the league couldn't get the necessary financial commitment and player support to proceed with LIV 2.0.";
+  const fixed = fakeAi(['KIND: NEWS\nTEAM: LIV Golf\nLINE: Operations being wound down due to financial issues', 'KIND: NEWS\nTEAM: LIV Golf\nLINE: LIV Golf winding down operations']);
+  const livOutcome = await summarizeStory(fixed, liv, {});
+  assert.equal(fixed.calls.length, 2);
+  assert.deepEqual(livOutcome, { status: 'ok', result: { line: 'LIV Golf winding down operations', team: null } });
+  // Already names the subject: no second call.
+  const fine = fakeAi(['KIND: NEWS\nTEAM: LIV Golf\nLINE: LIV Golf shutting down after financial trouble']);
+  await summarizeStory(fine, liv, {});
+  assert.equal(fine.calls.length, 1);
+});

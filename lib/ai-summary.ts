@@ -2,10 +2,10 @@
 // Every AI line must pass checkLine() before it can air; anything that fails falls back to the
 // plain (trimmed) story text, so a made-up score or name never reaches the stream.
 
-import { detectTeam, mentionsTeam, teamsNamed, TEAMS_BY_KEY, type Team } from './teams';
+import { detectTeam, mentionsTeam, teamsNamed, TEAMS_BY_KEY, type StoryContext, type Team } from './teams';
 
 /** Bump when the prompt changes so stories get rewritten with the new instructions. */
-export const AI_PROMPT_VERSION = 7;
+export const AI_PROMPT_VERSION = 8;
 
 // Tried in order. Cloudflare retires models from time to time (llama-3.1-8b-instruct was retired
 // 2026-05-30), so if one is gone the next is used automatically. No OpenAI models (Jay's rule).
@@ -29,8 +29,10 @@ Rewrite the story you are given as ONE short, factual line that makes sense on i
 Rules:
 - At most 70 characters. Short and punchy, like a headline.
 - The ticker shows the main team's logo and name right BEFORE your line. So do NOT start the line with that team's name (city or nickname): lead with the player or the event instead, then what happened (result, score, stat, signing, trade, injury). Reword it as a complete phrase (for example "Jacoby Brissett traded to Ravens"), never just drop the name and leave a fragment like "Trade Jacoby Brissett". Other teams can be named anywhere in the line.
+- Only NFL, NBA, MLB, NHL and major college teams get a logo panel. Anything else (a league, a golf or tennis tour, a soccer club, a school we don't cover, a person) gets NO panel, so the line MUST name who it is about: "LIV Golf winding down operations", never just "Operations being wound down".
 - If no single team is the focus (TEAM: NONE), start with whoever the story is about.
 - Use ONLY facts stated in the story. Never add numbers, names, scores, dates or details that are not in it.
+- Keep the story's exact meaning. Never swap in a word that a sports fan would read differently: "teammates didn't defend him" is NOT "lack of defense". If shortening would change the meaning, stay closer to the story's own words.
 - Normal capitalization: capitalize the first word and all names of people, teams and places.
 - No hype, no opinions, no emojis, no hashtags, no quotation marks around the line.
 
@@ -114,12 +116,24 @@ export function checkLine(line: string, source: string): string | null {
   return null;
 }
 
-/** Map the model's TEAM answer to a known team, only if the story itself mentions that team. */
-export function resolveTeam(teamName: string | null, source: string): Team | null {
+/**
+ * Map the model's TEAM answer to a known team, only if the story itself mentions that team.
+ * `context.college`: an ESPN college story, so "Hurricanes" means Miami (UM), not Carolina's NHL team.
+ */
+export function resolveTeam(teamName: string | null, source: string, context: StoryContext = {}): Team | null {
   if (!teamName) return null;
   // "Jets" could be the NFL or NHL Jets: keep the one the story itself is about.
-  const matches = teamsNamed(teamName).filter((team) => mentionsTeam(source, team));
-  return matches.length === 1 ? matches[0] : null;
+  const matches = teamsNamed(teamName).filter((team) => mentionsTeam(source, team, context));
+  if (matches.length === 1) return matches[0];
+  // Both a college and a pro team match: a college story means the college one, any other story the pro one.
+  const preferred = matches.filter((team) => (team.league === 'NCAA') === Boolean(context.college));
+  return preferred.length === 1 ? preferred[0] : null;
+}
+
+/** Whether the line names who the AI said the story is about ("LIV Golf" → "LIV …"). */
+function namesSubject(line: string, subject: string) {
+  const text = line.toLowerCase();
+  return subject.split(/\s+/).some((word) => word.length >= 3 && text.includes(word.toLowerCase()));
 }
 
 
@@ -176,7 +190,7 @@ async function ask(ai: AiBinding, messages: ChatMessage[]) {
 const allLowercase = (line: string) => /^[a-z]/.test(line) && line.split(/\s+/).length > 3 && !/[A-Z]/.test(line);
 
 /** Ask the model for a ticker line and run the safety checks. Throws if the AI service itself fails. */
-export async function summarizeStory(ai: AiBinding, story: string): Promise<AiOutcome> {
+export async function summarizeStory(ai: AiBinding, story: string, context: StoryContext = {}): Promise<AiOutcome> {
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM_PROMPT },
     { role: 'user', content: story },
@@ -188,20 +202,25 @@ export async function summarizeStory(ai: AiBinding, story: string): Promise<AiOu
   const problem = checkLine(parsed.line, story);
   if (problem) return { status: 'rejected', reason: problem };
   if (allLowercase(parsed.line)) return { status: 'rejected', reason: 'all lowercase' };
-  const team = resolveTeam(parsed.team, story)?.key ?? detectTeam(story)?.key ?? null;
+  const team = resolveTeam(parsed.team, story, context)?.key ?? detectTeam(story, context)?.key ?? null;
   let line = parsed.line;
 
-  // Still opens with the panel team ("Cardinals trade …")? Ask once for a reworded line. If the retry
-  // fails a check or still opens with the team, the first (safe) line airs, never a cut-down fragment.
-  if (startsWithTeam(line, team)) {
-    const teamName = TEAMS_BY_KEY.get(team!)?.name ?? 'the team';
+  // One retry, for either problem; if the retry fails a check or still has the problem, the first
+  // (safe) line airs — never a cut-down fragment.
+  // - Opens with the panel team ("Cardinals trade …"): the panel already shows it.
+  // - No panel will show, and the line doesn't say who it's about ("Operations being wound down").
+  const opensWithTeam = (candidate: string) => startsWithTeam(candidate, team);
+  const missingSubject = (candidate: string) => !team && Boolean(parsed.team) && !namesSubject(candidate, parsed.team!);
+  const teamName = team ? (TEAMS_BY_KEY.get(team)?.name ?? 'the team') : '';
+  const fix = opensWithTeam(line)
+    ? `That LINE starts with the team (${teamName}), but the ticker already shows the ${teamName} logo and name right before it. Rewrite the LINE so it starts with the player or the event, as a complete phrase with the same facts. Reply in the same format.`
+    : missingSubject(line)
+      ? `No logo or name will be shown before this LINE, so it must say who it is about. Rewrite the LINE so it names ${parsed.team} (or the player), with the same facts. Reply in the same format.`
+      : null;
+  if (fix) {
     try {
-      const retry = parseReply(await ask(ai, [
-        ...messages,
-        { role: 'assistant', content: reply },
-        { role: 'user', content: `That LINE starts with the team (${teamName}), but the ticker already shows the ${teamName} logo and name right before it. Rewrite the LINE so it starts with the player or the event, as a complete phrase with the same facts. Reply in the same format.` },
-      ]));
-      if (retry && !retry.feature && !checkLine(retry.line, story) && !allLowercase(retry.line) && !startsWithTeam(retry.line, team)) line = retry.line;
+      const retry = parseReply(await ask(ai, [...messages, { role: 'assistant', content: reply }, { role: 'user', content: fix }]));
+      if (retry && !retry.feature && !checkLine(retry.line, story) && !allLowercase(retry.line) && !opensWithTeam(retry.line) && !missingSubject(retry.line)) line = retry.line;
     } catch {
       // keep the first line
     }

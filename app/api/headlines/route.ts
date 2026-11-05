@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { detectTeam, isCollegeLink, type StoryContext } from '@/lib/teams';
+import { detectTeam, isCollegeLink, TEAMS_BY_KEY, type StoryContext } from '@/lib/teams';
 import { AI_PROMPT_VERSION, summarizeStory } from '@/lib/ai-summary';
 import { mixHeadlines, spreadTeamItems } from '@/lib/mix';
 import { isFeatureStory } from '@/lib/news-filter';
@@ -219,7 +219,7 @@ async function getAiLines(items: FeedItem[]) {
       const key = storyKey(item);
       aiInFlight.add(key);
       try {
-        const outcome = await withTimeout(summarizeStory(ai as never, item.story), AI_TIMEOUT_MS);
+        const outcome = await withTimeout(summarizeStory(ai as never, item.story, storyContext(item)), AI_TIMEOUT_MS);
         const entry: AiEntry = outcome.status === 'ok'
           ? { status: 'ok', line: outcome.result.line, team: outcome.result.team }
           : { status: outcome.status, line: null, team: null };
@@ -299,7 +299,8 @@ export async function GET(request: Request) {
       // The summary often names only the player ("Jalen Hurts …") while the headline names the team
       // ("… at Eagles facility"), so the headline is the fallback.
       // College stories (ESPN college link) also match bare school names ("Miami star …" → UM).
-      team: (useAi && entry.team) || detectTeam(item.story, storyContext(item))?.key || detectTeam(item.title, storyContext(item))?.key || null,
+      // A college story never gets a pro panel (older cached AI answers could say NHL "Hurricanes" for Miami).
+      team: (useAi && entry.team && !(storyContext(item).college && TEAMS_BY_KEY.get(entry.team)?.league !== 'NCAA') && entry.team) || detectTeam(item.story, storyContext(item))?.key || detectTeam(item.title, storyContext(item))?.key || null,
       tag: null,
     }];
   }));
