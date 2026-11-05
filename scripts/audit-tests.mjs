@@ -18,7 +18,7 @@ async function source(file, env = {}) {
 const { mixHeadlines } = await source('lib/mix.ts');
 const { parseMediaRange } = await source('lib/media-range.ts');
 const { createSceneWaiter, createJsonPoller } = await source('lib/ticker-runtime.ts');
-const { parseScoreboard } = await source('lib/scores.ts');
+const { parseScoreboard, groupScores } = await source('lib/scores.ts');
 const { readJsonObject } = await source('lib/request-body.ts');
 
 await test('malformed JSON bodies cannot crash field validators', async () => {
@@ -116,3 +116,49 @@ await test('AI cache failure does not take down custom headlines or original new
   assert.ok(data.ai.error);
 });
 
+
+await test('scores are grouped by sport, sports with live games first', () => {
+  const side = { abbr: 'X', score: '1', team: null, logo: null, rank: null, winner: false };
+  const game = (id, league, state, start) => ({ id, league, state, detail: '', away: side, home: side, start });
+  const mixed = [
+    game('a', 'NBA', 'final', 1), game('b', 'NHL', 'live', 2), game('c', 'NBA', 'live', 3),
+    game('d', 'NFL', 'upcoming', 9), game('e', 'NHL', 'final', 4), game('f', 'NBA', 'upcoming', 8), game('g', 'NFL', 'final', 5),
+  ];
+  const order = groupScores(mixed).map((item) => `${item.league}:${item.id}`);
+  // NBA and NHL have live games, so they lead (in the usual league order); NFL follows. No league appears twice.
+  assert.deepEqual(order, ['NBA:c', 'NBA:a', 'NBA:f', 'NHL:b', 'NHL:e', 'NFL:g', 'NFL:d']);
+  const many = Array.from({ length: 30 }, (_, index) => game(`n${index}`, 'NBA', 'final', index));
+  assert.equal(groupScores([...many, game('h', 'NHL', 'final', 1)]).filter((item) => item.league === 'NBA').length, 15);
+});
+
+const { summarizeStory, startsWithTeam } = await source('lib/ai-summary.ts');
+
+await test('AI lines never open with the team already shown on the panel', async () => {
+  assert.equal(startsWithTeam('Cardinals trade Jacoby Brissett to Ravens', 'nfl-ari'), true);
+  assert.equal(startsWithTeam('Arizona Cardinals trade QB', 'nfl-ari'), true);
+  assert.equal(startsWithTeam('The Cardinals trade QB', 'nfl-ari'), true);
+  assert.equal(startsWithTeam('UM star Toney has ankle sprain', 'ncaa-um'), true);
+  assert.equal(startsWithTeam('Jacoby Brissett traded to Ravens', 'nfl-ari'), false);
+  assert.equal(startsWithTeam('Cardinals trade QB', null), false);
+
+  const story = 'The Arizona Cardinals are finalizing a trade that sends quarterback Jacoby Brissett to the Baltimore Ravens, sources said.';
+  const fakeAi = (replies) => {
+    const calls = [];
+    return { calls, run: async (_model, input) => { calls.push(input.messages); return { response: replies[calls.length - 1] }; } };
+  };
+  // First line opens with the team -> one retry, reworded line airs.
+  const good = fakeAi(['KIND: NEWS\nTEAM: Cardinals\nLINE: Cardinals trade Jacoby Brissett to Ravens', 'KIND: NEWS\nTEAM: Cardinals\nLINE: Jacoby Brissett traded to Ravens']);
+  const first = await summarizeStory(good, story);
+  assert.equal(good.calls.length, 2);
+  assert.deepEqual(first, { status: 'ok', result: { line: 'Jacoby Brissett traded to Ravens', team: 'nfl-ari' } });
+
+  // Retry invents a name (fails the safety check) -> the first, safe line airs; never a fragment.
+  const bad = fakeAi(['KIND: NEWS\nTEAM: Cardinals\nLINE: Cardinals trade Jacoby Brissett to Ravens', 'KIND: NEWS\nTEAM: Cardinals\nLINE: Brissett dealt to Ravens for Lamar Jackson']);
+  const second = await summarizeStory(bad, story);
+  assert.equal(second.status === 'ok' && second.result.line, 'Cardinals trade Jacoby Brissett to Ravens');
+
+  // A line that already avoids the team needs no second call.
+  const once = fakeAi(['KIND: NEWS\nTEAM: Cardinals\nLINE: Jacoby Brissett headed to Ravens']);
+  await summarizeStory(once, story);
+  assert.equal(once.calls.length, 1);
+});

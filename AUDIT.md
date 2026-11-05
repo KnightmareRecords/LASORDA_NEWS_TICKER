@@ -55,7 +55,8 @@ To reproduce local checks: run the build, then `npx wrangler d1 migrations apply
 ### Review notes (added after the audit)
 
 - Re-checked with the college-team changes included: `tsc`, `npm run build`, and `node --test scripts/audit-tests.mjs` (8/8) pass; lint unchanged at 39. College detection was tested separately against the real ESPN feed (Toney → UM, Hurts → Eagles, FSU, ND; no wrong panels) but is not covered by the browser suite — watch a few college stories in the rehearsal.
-- `scripts/audit-browser.js` now waits 7 s after a simulated skip (the check interval is 5 s).
+- `scripts/audit-browser.js` now waits 7 s after a simulated skip, and `scripts/audit-media.js` advances the clock until the promo starts entering (the check interval is 5 s). Neither browser script has been re-run since that change on the home PC (the `playwright-cli` tool isn't installed there).
+- Scores are now grouped by sport; `audit-tests.mjs` has a 9th test for that ordering.
 - R2 file storage is already on (the rotation is live, which requires it). Uploaded videos are still untested on the live site.
 
 ## Before going live on November 6

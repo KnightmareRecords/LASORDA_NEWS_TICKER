@@ -35,6 +35,8 @@ const UPCOMING_WINDOW_MS = 18 * 3600_000;
 /** College has hundreds of games: finals/upcoming only when a ranked team plays; live games capped. */
 const COLLEGE_LIVE_CAP = 15;
 const MAX_ITEMS = 60;
+/** Games per sport, so one busy league (16 NBA games) can't push the others off the end of the strip. */
+const PER_LEAGUE_MAX = 15;
 const TIME_ZONE = 'America/Los_Angeles';
 
 // ESPN abbreviations that differ from ours (lib/teams.ts keys). Nickname matching covers most teams.
@@ -158,13 +160,26 @@ async function fetchLeague(league: ScoreLeague, path: string, now: number): Prom
 
 const ORDER: Record<ScoreItem['state'], number> = { live: 0, final: 1, upcoming: 2 };
 
+/**
+ * Grouped by sport (all NBA, then all NHL, …) so the strip never jumps back and forth between leagues.
+ * Sports with a live game come first, then the usual order (NFL, NBA, MLB, NHL, college).
+ * Within a sport: live, then finals (most recent first), then upcoming (soonest first).
+ */
+export function groupScores(items: ScoreItem[]): ScoreItem[] {
+  const byState = (a: ScoreItem, b: ScoreItem) => ORDER[a.state] - ORDER[b.state] || (a.state === 'final' ? b.start - a.start : a.state === 'upcoming' ? a.start - b.start : 0);
+  const groups = SOURCES.map(({ league }) => items.filter((item) => item.league === league).sort(byState).slice(0, PER_LEAGUE_MAX))
+    .filter((group) => group.length > 0);
+  const hasLive = (group: ScoreItem[]) => group.some((item) => item.state === 'live');
+  // Stable sort: leagues keep SOURCES order within "has live" / "no live".
+  groups.sort((a, b) => Number(hasLive(b)) - Number(hasLive(a)));
+  return groups.flat().slice(0, MAX_ITEMS);
+}
+
 export async function getScores(now = Date.now()) {
   const results = await Promise.allSettled(SOURCES.map(({ league, path }) => fetchLeague(league, path, now)));
   const items = results.flatMap((result) => (result.status === 'fulfilled' ? result.value : []));
-  // Live games first, then finals (most recent first), then upcoming (soonest first). League order kept within each.
-  items.sort((a, b) => ORDER[a.state] - ORDER[b.state] || (a.state === 'final' ? b.start - a.start : a.state === 'upcoming' ? a.start - b.start : 0));
   return {
-    games: items.slice(0, MAX_ITEMS),
+    games: groupScores(items),
     leagues: SOURCES.map(({ league }) => {
       const entry = cache.get(league);
       return { league, ok: Boolean(entry?.fetchedAt && entry.tried === entry.fetchedAt && now - entry.fetchedAt < STALE_MAX_MS), games: items.filter((item) => item.league === league).length };

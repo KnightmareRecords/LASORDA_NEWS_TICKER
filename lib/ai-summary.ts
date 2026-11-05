@@ -2,10 +2,10 @@
 // Every AI line must pass checkLine() before it can air; anything that fails falls back to the
 // plain (trimmed) story text, so a made-up score or name never reaches the stream.
 
-import { detectTeam, mentionsTeam, teamsNamed, type Team } from './teams';
+import { detectTeam, mentionsTeam, teamsNamed, TEAMS_BY_KEY, type Team } from './teams';
 
 /** Bump when the prompt changes so stories get rewritten with the new instructions. */
-export const AI_PROMPT_VERSION = 6;
+export const AI_PROMPT_VERSION = 7;
 
 // Tried in order. Cloudflare retires models from time to time (llama-3.1-8b-instruct was retired
 // 2026-05-30), so if one is gone the next is used automatically. No OpenAI models (Jay's rule).
@@ -28,7 +28,8 @@ Rewrite the story you are given as ONE short, factual line that makes sense on i
 
 Rules:
 - At most 70 characters. Short and punchy, like a headline.
-- Start with who the story is about (the team or player), then what happened: the result, score, stat, signing, trade or injury.
+- The ticker shows the main team's logo and name right BEFORE your line. So do NOT start the line with that team's name (city or nickname): lead with the player or the event instead, then what happened (result, score, stat, signing, trade, injury). Reword it as a complete phrase (for example "Jacoby Brissett traded to Ravens"), never just drop the name and leave a fragment like "Trade Jacoby Brissett". Other teams can be named anywhere in the line.
+- If no single team is the focus (TEAM: NONE), start with whoever the story is about.
 - Use ONLY facts stated in the story. Never add numbers, names, scores, dates or details that are not in it.
 - Normal capitalization: capitalize the first word and all names of people, teams and places.
 - No hype, no opinions, no emojis, no hashtags, no quotation marks around the line.
@@ -41,17 +42,22 @@ Examples:
 Story: The Bills have released safety C.J. Gardner-Johnson, the team announced Tuesday.
 KIND: NEWS
 TEAM: Bills
-LINE: Bills release safety C.J. Gardner-Johnson
+LINE: Safety C.J. Gardner-Johnson released
+
+Story: The Arizona Cardinals are trading quarterback Jacoby Brissett to the Baltimore Ravens, sources said.
+KIND: NEWS
+TEAM: Cardinals
+LINE: QB Jacoby Brissett being traded to Ravens
 
 Story: Dylan Samberg scored in overtime as the Winnipeg Jets snapped a nine-game losing streak by storming back from a four-goal deficit.
 KIND: NEWS
 TEAM: Jets
-LINE: Winnipeg Jets rally from four goals down to snap nine-game skid
+LINE: Dylan Samberg's OT winner caps rally, snaps nine-game skid
 
 Story: Arizona State, picked third in the Big 12 preseason poll, beat Utah 31-17 on Saturday.
 KIND: NEWS
-TEAM: NONE
-LINE: Arizona State beats Utah 31-17
+TEAM: Sun Devils
+LINE: 31-17 win over Utah
 
 Story: Devin Vassell has quietly evolved into the veteran presence for the San Antonio Spurs.
 KIND: FEATURE
@@ -60,7 +66,7 @@ LINE: Devin Vassell has become the Spurs' veteran presence
 
 Reply in exactly this format and nothing else:
 KIND: <NEWS or FEATURE>
-TEAM: <nickname of the NFL, NBA, MLB or NHL team the story is mainly about, or NONE for college and other sports>
+TEAM: <nickname of the NFL, NBA, MLB, NHL or major college team the story is mainly about, or NONE>
 LINE: <the ticker line>`;
 
 export type AiResult = { line: string; team: string | null };
@@ -117,9 +123,22 @@ export function resolveTeam(teamName: string | null, source: string): Team | nul
 }
 
 
+const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 /**
- * Final polish of an approved line: capital first letter. The team name stays in the line even when
- * a team panel shows it — stripping it left confusing fragments like "Lose Lamar Jackson".
+ * Whether a line opens with the team shown on its panel ("Cardinals trade …", "Arizona Cardinals …",
+ * "The Bills …", "UM …"). The ticker already shows that team right before the line.
+ */
+export function startsWithTeam(line: string, teamKey: string | null) {
+  const team = teamKey ? TEAMS_BY_KEY.get(teamKey) : undefined;
+  if (!team) return false;
+  const names = [`${team.city} ${team.name}`, team.name, ...(team.aliases ?? []), ...(team.short ? [team.short] : []), team.city, ...(team.cityAliases ?? [])];
+  return names.some((name) => new RegExp(`^(?:the\\s+)?${escapeRegex(name)}(?![A-Za-z])`, 'i').test(line.trim()));
+}
+
+/**
+ * Final polish of an approved line: capital first letter. Lines are never cut down mechanically:
+ * stripping the team name left fragments like "Lose Lamar Jackson"; the AI rewords instead (prompt v7).
  */
 export function finishLine(line: string) {
   const text = line.trim();
@@ -137,35 +156,55 @@ function replyText(output: unknown) {
   return '';
 }
 
-/** Ask the model for a ticker line and run the safety checks. Throws if the AI service itself fails. */
-export async function summarizeStory(ai: AiBinding, story: string): Promise<AiOutcome> {
-  let output: unknown;
+type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+
+/** One model call, falling back to the next model if Cloudflare has retired one. */
+async function ask(ai: AiBinding, messages: ChatMessage[]) {
   for (let index = preferredModel; ; index++) {
     if (index >= AI_MODELS.length) throw new Error('None of the AI models are available on Cloudflare any more.');
     try {
-      output = await ai.run(AI_MODELS[index], {
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: story },
-        ],
-        max_tokens: 100,
-        temperature: 0.2,
-      });
+      const output = await ai.run(AI_MODELS[index], { messages, max_tokens: 100, temperature: 0.2 });
       preferredModel = index;
-      break;
+      return replyText(output);
     } catch (error) {
       if (!isModelGone(error)) throw error;
       console.warn(`AI model ${AI_MODELS[index]} is unavailable, trying the next one`, error);
     }
   }
-  const parsed = parseReply(replyText(output));
+}
+
+const allLowercase = (line: string) => /^[a-z]/.test(line) && line.split(/\s+/).length > 3 && !/[A-Z]/.test(line);
+
+/** Ask the model for a ticker line and run the safety checks. Throws if the AI service itself fails. */
+export async function summarizeStory(ai: AiBinding, story: string): Promise<AiOutcome> {
+  const messages: ChatMessage[] = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: story },
+  ];
+  const reply = await ask(ai, messages);
+  const parsed = parseReply(reply);
   if (!parsed) return { status: 'rejected', reason: 'unreadable reply' };
   if (parsed.feature) return { status: 'feature' };
   const problem = checkLine(parsed.line, story);
   if (problem) return { status: 'rejected', reason: problem };
-  if (/^[a-z]/.test(parsed.line) && parsed.line.split(/\s+/).length > 3 && !/[A-Z]/.test(parsed.line)) {
-    return { status: 'rejected', reason: 'all lowercase' };
-  }
+  if (allLowercase(parsed.line)) return { status: 'rejected', reason: 'all lowercase' };
   const team = resolveTeam(parsed.team, story)?.key ?? detectTeam(story)?.key ?? null;
-  return { status: 'ok', result: { line: finishLine(parsed.line), team } };
+  let line = parsed.line;
+
+  // Still opens with the panel team ("Cardinals trade …")? Ask once for a reworded line. If the retry
+  // fails a check or still opens with the team, the first (safe) line airs, never a cut-down fragment.
+  if (startsWithTeam(line, team)) {
+    const teamName = TEAMS_BY_KEY.get(team!)?.name ?? 'the team';
+    try {
+      const retry = parseReply(await ask(ai, [
+        ...messages,
+        { role: 'assistant', content: reply },
+        { role: 'user', content: `That LINE starts with the team (${teamName}), but the ticker already shows the ${teamName} logo and name right before it. Rewrite the LINE so it starts with the player or the event, as a complete phrase with the same facts. Reply in the same format.` },
+      ]));
+      if (retry && !retry.feature && !checkLine(retry.line, story) && !allLowercase(retry.line) && !startsWithTeam(retry.line, team)) line = retry.line;
+    } catch {
+      // keep the first line
+    }
+  }
+  return { status: 'ok', result: { line: finishLine(line), team } };
 }

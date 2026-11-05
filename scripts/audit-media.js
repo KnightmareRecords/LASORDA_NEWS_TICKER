@@ -28,7 +28,10 @@ async (page) => {
     await tab.goto('http://127.0.0.1:8899/ticker?preview=1');
     await tab.waitForTimeout(2000);
     seq++;
-    await tick(1300);
+    // The skip check runs every 5 s: advance the clock in small steps until the promo starts entering
+    // (so the error below still lands inside the entrance fade).
+    for (let waited = 0; waited < 7000 && (await tab.locator('.media-layer img').count()) === 0; waited += 100) await tick(100);
+    await tick(300);
     check(await tab.locator('.media-layer img').count() === 1, 'Ready image enters while the broken upload is skipped');
     check((await tab.locator('.media-layer img').getAttribute('src')).includes('/brand/'), 'Broken image never airs');
     await tab.locator('.media-layer img').evaluate((img) => img.dispatchEvent(new Event('error')));
@@ -36,7 +39,7 @@ async (page) => {
     check(await tab.locator('.media-layer').count() === 0, 'Image failure during entrance fade ends the promo early');
     check(await tab.locator('.ticker-shell').evaluate((el) => getComputedStyle(el).opacity === '1'), 'News bar returns after failed media');
     seq++;
-    await tick(5000);
+    await tick(7000); // skip check runs every 5 s
     check((await tab.locator('.promo-text').innerText()).includes('LASORDASCARDHOUSE'), 'Rotation continues to the next working promo');
     return results;
   } finally { await context.close(); }

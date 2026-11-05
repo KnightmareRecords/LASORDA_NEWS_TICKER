@@ -55,7 +55,7 @@ Explorer. No database migrations are pending (0000–0005 are all applied remote
 - **Feed:** ESPN top news RSS, fetched from ESPN at most **every 15 minutes**. Stories use the RSS
   summary, not the teaser headline.
 - **AI short lines go straight to air**, protected by safety checks: every number and name must
-  appear in the source story, otherwise the original text airs. Keep the team name in the line.
+  appear in the source story, otherwise the original text airs. *(Updated 2026-11-05: lines no longer open with the team on the panel; the AI rewords, e.g. "Jacoby Brissett being traded to Ravens" — see CLAUDE.md.)*
 - **On-screen label for generic stories:** `NEWS` (set in the control panel).
 - **Look:** SportsCenter-style. Lasorda's Card House logo block on a light panel, team panels in
   team colors with the Anton font, optional red tags. The bar is **slim** (~42 px at text size 25)
