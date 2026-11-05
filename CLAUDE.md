@@ -8,6 +8,8 @@ Owner: Jay. Works on this from two computers (home + office), one at a time.
 3. GitHub is the source of truth: https://github.com/KnightmareRecords/LASORDA_NEWS_TICKER (private, branch `main`).
 4. Keep this file current: update "Status" and "Change log" below when something meaningful changes, and push it.
 
+**Moving to Claude Code:** read `HANDOFF.md` first (current state, pending deploy, Jay's preferences, gotchas).
+
 ## What it is
 Two-page web app on Cloudflare Workers + D1 (SQLite). Jay wants **no ChatGPT/OpenAI involvement** — all OpenAI Sites tooling was removed on 2026-11-04; don't reintroduce it.
 - `/` — **Control panel** (`app/control-panel.tsx`): add / enable / delete custom headlines ("rotation" or "play next"), RSS feed URL + label, colors, font, font size, scroll speed, OBS setup info, installable as an app (PWA, `public/sw.js`, `app/manifest.ts`).
@@ -52,6 +54,7 @@ Note: `compatibility_date` must not be newer than what the installed wrangler su
 - Next feature work: not chosen yet — ask Jay.
 
 ## Change log
+- 2026-11-04: Added HANDOFF.md for continuing in Claude Code on the office Mac. Live = 45f02e4; 1914573 + 8112ee2 still to deploy.
 - 2026-11-04: Feed strip always opens with a team story (team panel first on screen); team stories at evenly spaced slots from position 0 (`spreadTeamItems`). "Play next" custom headlines still go before it.
 - 2026-11-04: Non-news filter: `lib/news-filter.ts` word rules (questions, "Here's…", "we break down", power rankings, previews, betting, fantasy…) drop feature stories before AI; AI prompt v5 also labels KIND: NEWS/FEATURE and features are dropped (`ai_lines.status = 'feature'`). Feed reads 40 items (was 24). Control panel shows "skipped as not news" count.
 - 2026-11-04: AI prompt v4: team name kept in AI lines even with a team panel (stripping it gave fragments like "Lose Lamar Jackson"). Deployed NHL + half-height ticker remotely.
