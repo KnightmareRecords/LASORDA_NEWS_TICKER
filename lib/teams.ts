@@ -3,6 +3,8 @@
 // Only team names and colors are used — no official logos or wordmarks (trademarks).
 // College teams (major conferences) come from lib/college-teams.ts, generated from ESPN.
 import { COLLEGE_TEAMS } from './college-teams';
+// Panel background overrides for teams whose logo blends into their own color (generated).
+import { PANEL_BACKGROUNDS } from './panel-backgrounds';
 
 /** Pro leagues. */
 export type League = 'NFL' | 'NBA' | 'MLB' | 'NHL';
@@ -228,6 +230,10 @@ function bestText(background: string, preferred: string) {
  * ticker bar, so those teams use their secondary color as the panel background instead.
  */
 export function panelColors(team: Team) {
+  // Teams whose logo is the same color as their panel (logo invisible): a different panel background,
+  // with the lettering in the team's main color (Jay asked for the Lightning: white panel, navy text).
+  const override = PANEL_BACKGROUNDS[team.key];
+  if (override) return { background: override, text: bestText(override, team.primary) };
   const tooDark = luminance(team.primary) < 0.025 && luminance(team.secondary) > luminance(team.primary);
   const background = tooDark ? team.secondary : team.primary;
   const other = tooDark ? team.primary : team.secondary;

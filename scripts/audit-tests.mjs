@@ -220,3 +220,40 @@ await test('a team named as the opponent never becomes the panel', () => {
   assert.equal(key('Hurts makes appearance at Eagles facility'), 'nfl-phi');
   assert.equal(key('Miami star Toney out against Notre Dame', { college: true }), 'ncaa-um');
 });
+
+const { sportLabel, isCollegeSport } = await source('lib/sports.ts');
+
+await test('stories without a team panel show their sport instead of NEWS', () => {
+  assert.equal(sportLabel({ link: 'https://www.espn.com/golf/story/_/id/1/x' }, 'NEWS'), 'GOLF');
+  assert.equal(sportLabel({ link: 'https://www.nbcsports.com/nfl/profootballtalk/rumor-mill/news/x' }, 'NEWS'), 'NFL');
+  // Yahoo addresses have no section; the feed itself says the sport.
+  assert.equal(sportLabel({ link: 'https://sports.yahoo.com/articles/x-123.html', feedUrl: 'https://sports.yahoo.com/college-football/rss/' }, 'NEWS'), 'COLLEGE FB');
+  assert.equal(sportLabel({ link: 'https://sports.yahoo.com/articles/x.html', feedUrl: 'https://sports.yahoo.com/rss/', title: 'Lomachenko signs multi-year deal with Top Rank' }, 'NEWS'), 'BOXING');
+  assert.equal(sportLabel({ title: 'LIV Golf to shut down after 5-year run' }, 'NEWS'), 'GOLF');
+  assert.equal(sportLabel({ title: 'Liverpool facing huge transfer decision' }, 'NEWS'), 'SOCCER');
+  assert.equal(sportLabel({ title: 'Something with no sport words' }, 'NEWS'), 'NEWS');
+  assert.equal(isCollegeSport('COLLEGE FB'), true);
+  assert.equal(isCollegeSport('NFL'), false);
+});
+
+const { panelColors, TEAMS_BY_KEY } = await source('lib/teams.ts');
+
+await test('Lightning panel is flipped so its navy logo shows', () => {
+  assert.deepEqual(panelColors(TEAMS_BY_KEY.get('nhl-tbl')), { background: '#FFFFFF', text: '#002868' });
+});
+
+const { teamFromPlayers, normalizePlayerName } = await source('lib/players.ts');
+
+await test('a story naming only a player gets that player\'s team (last resort)', () => {
+  const roster = { 'kyler murray': 'nfl-min', 'carson wentz': 'nfl-min', 'lebron james': 'nba-lal', 'ronald acuna': 'mlb-atl' };
+  assert.equal(teamFromPlayers('Kyler Murray out for Monday vs. Bills, week-to-week with hamstring injury', roster), 'nfl-min');
+  assert.equal(teamFromPlayers('Vikings QB Carson Wentz will start', roster), 'nfl-min');
+  // A player named as the opponent doesn't count.
+  assert.equal(teamFromPlayers('Rookie held to 12 points against LeBron James', roster), null);
+  // Accents and suffixes are ignored.
+  assert.equal(normalizePlayerName('Ronald Acuña Jr.'), 'ronald acuna');
+  assert.equal(teamFromPlayers('Ronald Acuña Jr. homers twice', roster), 'mlb-atl');
+  assert.equal(teamFromPlayers('Nobody we know signs a deal', roster), null);
+  // The real generated roster loads and knows current players.
+  assert.equal(teamFromPlayers('Kyler Murray out with hamstring injury'), 'nfl-min');
+});

@@ -1,6 +1,8 @@
 import { env } from 'cloudflare:workers';
 import { detectTeam, isCollegeLink, TEAMS_BY_KEY, type StoryContext } from '@/lib/teams';
 import { AI_PROMPT_VERSION, summarizeStory } from '@/lib/ai-summary';
+import { isCollegeSport, sportLabel } from '@/lib/sports';
+import { teamFromPlayers } from '@/lib/players';
 import { feedName, mixFeeds, parseFeedList, PER_FEED_WHEN_MIXED, SINGLE_FEED_LIMIT } from '@/lib/feeds';
 import { mixHeadlines, spreadTeamItems } from '@/lib/mix';
 import { isFeatureStory } from '@/lib/news-filter';
@@ -65,7 +67,7 @@ function pickStory(title: string, summary: string) {
 
 /** `story` is the full story text (for AI); `text` is the trimmed version that airs without AI. */
 /** `link`: the story's web address — ESPN's says which sport it is (…/college-football/…). */
-type FeedItem = { id: string; text: string; story: string; title: string; link: string };
+type FeedItem = { id: string; text: string; story: string; title: string; link: string; feedUrl?: string };
 type CachedFeed = { items: FeedItem[]; fetchedAt: number; lastFailureAt: number; lastError: string | null };
 
 // Feed sites (Google News especially) rate-limit frequent requests. Every OBS ticker and control
@@ -151,7 +153,9 @@ async function fetchFeedXml(feedUrl: string) {
   throw new Error(`The feed site didn’t send a feed (${unique}).`);
 }
 
-const storyContext = (item: FeedItem): StoryContext => ({ college: isCollegeLink(item.link) });
+// College story: ESPN's address says so, or the story's sport is college — from its address, its feed
+// (Yahoo's college football feed uses plain /articles/… addresses) or wording like "CFP" (lib/sports.ts).
+const storyContext = (item: FeedItem): StoryContext => ({ college: isCollegeLink(item.link) || isCollegeSport(sportLabel(item, '')) });
 
 async function getFeedHeadlines(feedUrl: string): Promise<FeedItem[]> {
   const xml = await fetchFeedXml(feedUrl);
@@ -165,7 +169,7 @@ async function getFeedHeadlines(feedUrl: string): Promise<FeedItem[]> {
       // RSS: <link>url</link>; Atom: <link href="url"/>.
       const link = match[1].match(/<link(?:\s[^>]*)?>([\s\S]*?)<\/link>/i)?.[1] ?? match[1].match(/<link[^>]*\shref="([^"]+)"/i)?.[1] ?? '';
       const story = pickStory(decodeXml(title), decodeXml(summary));
-      return { id: decodeXml(guid), text: shorten(story), story, title: decodeXml(title), link: decodeXml(link) };
+      return { id: decodeXml(guid), text: shorten(story), story, title: decodeXml(title), link: decodeXml(link), feedUrl };
     })
     .filter((item) => item.text);
 }
@@ -319,12 +323,17 @@ export async function GET(request: Request) {
     return [{
       id: item.id,
       text: useAi ? entry.line! : item.text,
-      source: feedLabel,
+      // No team panel: show the sport (GOLF, BOXING, NFL…) instead of the generic label (lib/sports.ts).
+      source: sportLabel(item, feedLabel),
       // The summary often names only the player ("Jalen Hurts …") while the headline names the team
       // ("… at Eagles facility"), so the headline is the fallback.
       // College stories (ESPN college link) also match bare school names ("Miami star …" → UM).
       // A college story never gets a pro panel (older cached AI answers could say NHL "Hurricanes" for Miami).
-      team: (useAi && entry.team && !(storyContext(item).college && TEAMS_BY_KEY.get(entry.team)?.league !== 'NCAA') && entry.team) || detectTeam(item.story, storyContext(item))?.key || detectTeam(item.title, storyContext(item))?.key || null,
+      team: (useAi && entry.team && !(storyContext(item).college && TEAMS_BY_KEY.get(entry.team)?.league !== 'NCAA') && entry.team) || detectTeam(item.story, storyContext(item))?.key || detectTeam(item.title, storyContext(item))?.key
+        // Last resort: the story names a player but no team ("Kyler Murray out vs. Bills" → Vikings).
+        // Pro rosters only (lib/rosters.ts, built on Jay's PC when deploying): in-memory, no network.
+        || (storyContext(item).college ? null : teamFromPlayers(`${item.title}. ${item.story}`))
+        || null,
       tag: null,
     }];
   }));

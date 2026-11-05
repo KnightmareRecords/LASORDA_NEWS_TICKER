@@ -11,6 +11,8 @@ fi
 echo
 # File storage for uploaded promos (creates it the first time; "already exists" is fine).
 npx wrangler r2 bucket create lasorda-ticker-media >/dev/null 2>&1 < /dev/null
+echo "Updating player rosters from ESPN (if that fails, the previous list is kept)..."
+node scripts/fetch-rosters.mjs
 echo "Publishing..."
 if npm run deploy; then
   echo

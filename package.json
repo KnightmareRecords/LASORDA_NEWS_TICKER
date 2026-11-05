@@ -12,6 +12,8 @@
     "lint": "oxlint",
     "format": "oxfmt",
     "db:generate": "drizzle-kit generate",
+    "rosters": "node scripts/fetch-rosters.mjs",
+    "panel-colors": "node scripts/fix-panel-colors.mjs",
     "deploy": "vinext build && wrangler deploy --config dist/server/wrangler.json",
     "db:migrate:local": "wrangler d1 migrations apply DB --local",
     "db:migrate:remote": "wrangler d1 migrations apply DB --remote"

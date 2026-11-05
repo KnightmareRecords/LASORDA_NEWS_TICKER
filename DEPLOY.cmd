@@ -7,6 +7,8 @@ if errorlevel 1 (echo. & echo Database update failed - nothing was published. Se
 echo.
 rem File storage for uploaded promos (creates it the first time; an "already exists" message is fine).
 call npx wrangler r2 bucket create lasorda-ticker-media < nul >nul 2>&1
+echo Updating player rosters from ESPN (if that fails, the previous list is kept)...
+call node scripts/fetch-rosters.mjs
 echo Publishing...
 call npm run deploy
 if errorlevel 1 (echo. & echo Publishing failed - the update is NOT live. See the error above. & pause & exit /b 1)
