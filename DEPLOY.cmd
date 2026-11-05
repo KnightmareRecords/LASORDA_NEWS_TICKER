@@ -9,6 +9,7 @@ rem File storage for uploaded promos (creates it the first time; an "already exi
 call npx wrangler r2 bucket create lasorda-ticker-media < nul >nul 2>&1
 echo Publishing...
 call npm run deploy
+if errorlevel 1 (echo. & echo Publishing failed - the update is NOT live. See the error above. & pause & exit /b 1)
 echo.
 echo Done. Changes are live in about a minute.
 pause

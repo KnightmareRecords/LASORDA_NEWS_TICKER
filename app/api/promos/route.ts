@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { isAdmin, unauthorized } from '@/lib/admin-auth';
+import { readJsonObject } from '@/lib/request-body';
 import { cleanPromoText, PROMO_IMAGE_TYPES, PROMO_MAX_BYTES, PROMO_SELECT, PROMO_VIDEO_TYPES, toPromo, type PromoRow } from '@/lib/promos';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +11,7 @@ export async function GET() {
     return Response.json(result.results.map(toPromo), { headers: { 'Cache-Control': 'no-store' } });
   } catch {
     // Table missing (migration not applied yet) or a DB hiccup: the ticker just runs without promos.
-    return Response.json([], { headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ error: 'Promos are temporarily unavailable.' }, { status: 503, headers: { 'Cache-Control': 'no-store' } });
   }
 }
 
@@ -25,7 +26,7 @@ export async function POST(request: Request) {
   const contentType = request.headers.get('Content-Type') ?? '';
 
   if (contentType.includes('application/json')) {
-    const body = (await request.json().catch(() => ({}))) as { text?: unknown };
+    const body = await readJsonObject(request);
     const text = cleanPromoText(body.text);
     if (!text) return Response.json({ error: 'Type the promo text first.' }, { status: 400 });
     const result = await env.DB.prepare('INSERT INTO promos (kind, text, enabled, position, created_at) VALUES (?, ?, 1, ?, ?)')
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
 /** Reorder: { order: [id, id, …] }; the first id plays first. */
 export async function PATCH(request: Request) {
   if (!isAdmin(request)) return unauthorized();
-  const body = (await request.json().catch(() => ({}))) as { order?: unknown };
+  const body = await readJsonObject(request);
   if (!Array.isArray(body.order) || body.order.length === 0 || !body.order.every((id) => Number.isInteger(id))) {
     return Response.json({ error: 'Invalid order.' }, { status: 400 });
   }

@@ -8,10 +8,11 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import type { Promo } from '@/lib/promos';
-import { HOUSE_PANEL_KEY, panelColors, TEAMS, TEAMS_BY_KEY, type League } from '@/lib/teams';
+import { HOUSE_PANEL_KEY, panelColors, teamFullName, teamLabel, TEAMS, TEAMS_BY_KEY, type TeamLeague } from '@/lib/teams';
 
 const TAG_SUGGESTIONS = ['BREAKING', 'DEVELOPING STORY', 'BREAK ALERT', 'NEW DROP', 'GIVEAWAY', 'FINAL'];
-const LEAGUES: League[] = ['NFL', 'NBA', 'MLB', 'NHL'];
+const LEAGUES: TeamLeague[] = ['NFL', 'NBA', 'MLB', 'NHL', 'NCAA'];
+const LEAGUE_GROUP_LABEL: Record<TeamLeague, string> = { NFL: 'NFL', NBA: 'NBA', MLB: 'MLB', NHL: 'NHL', NCAA: 'College (major conferences)' };
 
 function TeamChip({ teamKey }: { teamKey: string | null }) {
   if (teamKey === HOUSE_PANEL_KEY) {
@@ -22,7 +23,7 @@ function TeamChip({ teamKey }: { teamKey: string | null }) {
   const colors = panelColors(team);
   return (
     <span className="inline-flex items-center rounded px-2 py-0.5 text-xs font-bold uppercase tracking-wide" style={{ background: colors.background, color: colors.text }}>
-      {team.name}
+      {teamLabel(team)}
     </span>
   );
 }
@@ -201,7 +202,10 @@ export function ControlPanel() {
 
   useEffect(() => {
     void fetch('/api/settings', { cache: 'no-store' })
-      .then((response) => response.json() as Promise<TickerSettings>)
+      .then((response) => {
+        if (!response.ok) throw new Error('Could not load ticker appearance.');
+        return response.json() as Promise<TickerSettings>;
+      })
       .then((loaded) => {
         setSettings(loaded);
         setSavedSettings(loaded);
@@ -325,17 +329,19 @@ export function ControlPanel() {
   }
 
   async function update(id: number, patch: Partial<Pick<CustomHeadline, 'enabled' | 'placement'>>) {
-    setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
-    const response = await fetch(`/api/custom/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
-      body: JSON.stringify(patch),
-    });
-    if (!response.ok) {
-      setError(await errorFrom(response, 'That change did not save.'));
-      await load();
-    } else {
+    setError('');
+    try {
+      const response = await fetch(`/api/custom/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+        body: JSON.stringify(patch),
+        signal: AbortSignal.timeout(15_000),
+      });
+      if (!response.ok) throw new Error(await errorFrom(response, 'That change did not save.'));
+      setItems((current) => current.map((item) => (item.id === id ? { ...item, ...patch } : item)));
       refreshPreview();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'That change did not save.');
     }
   }
 
@@ -499,9 +505,9 @@ export function ControlPanel() {
                     <option value="">None — show LIVE</option>
                     <option value={HOUSE_PANEL_KEY}>Lasorda Logo</option>
                     {LEAGUES.map((league) => (
-                      <optgroup key={league} label={league}>
+                      <optgroup key={league} label={LEAGUE_GROUP_LABEL[league]}>
                         {TEAMS.filter((item) => item.league === league).map((item) => (
-                          <option key={item.key} value={item.key}>{item.city === item.name ? item.name : `${item.city} ${item.name}`}</option>
+                          <option key={item.key} value={item.key}>{teamFullName(item)}</option>
                         ))}
                       </optgroup>
                     ))}
@@ -802,14 +808,14 @@ function PreviewStage({ frameRef, unsaved, feedChanged, adminKey, onError }: { f
     }
   }
 
-  // "Skip ahead": OBS (and this preview) check every 3 seconds and crossfade to the next part.
+  // "Skip ahead": OBS (and this preview) check every 5 seconds and crossfade to the next part.
   async function skipAhead() {
     setSkip('sending');
     try {
       const response = await fetch('/api/advance', { method: 'POST', headers: { 'X-Admin-Key': adminKey } });
       if (!response.ok) throw new Error(await errorFrom(response, 'Skip ahead did not go through.'));
       setSkip('sent');
-      window.setTimeout(() => setSkip('idle'), 3500);
+      window.setTimeout(() => setSkip('idle'), 5500);
     } catch (err) {
       setSkip('idle');
       onError(err instanceof Error ? err.message : 'Skip ahead did not go through.');
@@ -849,11 +855,11 @@ function PreviewStage({ frameRef, unsaved, feedChanged, adminKey, onError }: { f
           <Button
             type="button"
             disabled={!adminKey || skip === 'sending'}
-            title={adminKey ? 'End the current segment or promo and crossfade to the next one (on stream within 3 seconds)' : 'Enter your admin key first'}
+            title={adminKey ? 'End the current segment or promo and crossfade to the next one (on stream within 5 seconds)' : 'Enter your admin key first'}
             onClick={skipAhead}
             className="h-8 bg-[#ffb000] px-3 text-xs font-semibold text-black hover:bg-[#ffc13b]"
           >
-            {skip === 'sent' ? <><Check /> Skipping — on stream within 3 sec</> : <><SkipForward /> Skip ahead</>}
+            {skip === 'sent' ? <><Check /> Skipping — on stream within 5 sec</> : <><SkipForward /> Skip ahead</>}
           </Button>
         </div>
       </div>

@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { isAdmin, unauthorized } from '@/lib/admin-auth';
 import { cleanTag, cleanTeam } from '@/lib/headline-fields';
+import { readJsonObject } from '@/lib/request-body';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +9,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!isAdmin(request)) return unauthorized();
   const { id } = await context.params;
   const numericId = Number(id);
-  const body = (await request.json()) as { enabled?: boolean; placement?: string; team?: unknown; tag?: unknown };
+  const body = await readJsonObject(request);
   if (!Number.isInteger(numericId)) return Response.json({ error: 'Invalid id.' }, { status: 400 });
 
   if (typeof body.enabled === 'boolean') {

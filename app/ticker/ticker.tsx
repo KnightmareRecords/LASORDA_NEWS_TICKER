@@ -1,9 +1,10 @@
 'use client';
 
 import { Component, useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { HOUSE_PANEL_KEY, HOUSE_PANEL_LOGO, panelColors, TEAMS_BY_KEY } from '@/lib/teams';
+import { HOUSE_PANEL_KEY, HOUSE_PANEL_LOGO, panelColors, teamLabel, TEAMS_BY_KEY } from '@/lib/teams';
 import type { ScoreItem, ScoreSide } from '@/lib/scores';
 import type { Promo } from '@/lib/promos';
+import { createJsonPoller, createSceneWaiter } from '@/lib/ticker-runtime';
 
 // Live-stream rule for this file: nothing that breaks (feed, scores, a promo file, a render bug)
 // may ever show an error on stream. Each source keeps its last good copy, broken promos are
@@ -11,7 +12,7 @@ import type { Promo } from '@/lib/promos';
 
 type Headline = { id: string; text: string; source: string; team?: string | null; tag?: string | null };
 type Segment = 'news' | 'scores';
-type Scene = { kind: Segment; run: number } | { kind: 'promo'; promo: Promo; run: number };
+type Scene = { kind: Segment; run: number; offset?: number } | { kind: 'promo'; promo: Promo; run: number };
 /** The scene fading out during a crossfade, with its scroll speed frozen so it doesn't jump. */
 type Leaving = { scene: Scene; duration: number };
 
@@ -22,7 +23,8 @@ const FADE_MS = 1400;
 const POLL_MS = 15_000;
 const SCORES_POLL_MS = 30_000;
 /** How often the ticker checks for the control panel's "Skip ahead" button. */
-const ADVANCE_POLL_MS = 3_000;
+// 5 s keeps Cloudflare's free 100k requests/day comfortable with OBS + preview + phone view open.
+const ADVANCE_POLL_MS = 5_000;
 /** A promo file that won't load is skipped, then retried after this long. */
 const PROMO_RETRY_MS = 5 * 60_000;
 const PROMO_LOAD_TIMEOUT_MS = 20_000;
@@ -83,7 +85,7 @@ class Quiet extends Component<{ children: ReactNode; onError?: () => void }, { f
 }
 
 function hideOnError(event: { currentTarget: HTMLElement }) {
-  event.currentTarget.remove();
+  event.currentTarget.style.display = 'none';
 }
 
 function NewsItems({ headlines }: { headlines: Headline[] }) {
@@ -104,7 +106,7 @@ function NewsItems({ headlines }: { headlines: Headline[] }) {
             {/* Team logos are public/teams/<team key>.png; hidden if a file is missing. */}
             {/* oxlint-disable-next-line next/no-img-element */}
             <img className="ticker-team-logo" src={`/teams/${team.key}.png`} alt="" onError={hideOnError} />
-            {team.name}
+            {teamLabel(team)}
           </b>
         ) : (
           <strong className={item.source === 'LIVE' ? 'source-live' : ''}>{item.source}</strong>
@@ -152,11 +154,25 @@ function ScoreItems({ games }: { games: ScoreItem[] }) {
 }
 
 function TextPromo({ text }: { text: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    const content = ref.current;
+    const parent = content?.parentElement;
+    if (!content || !parent) return;
+    const fit = () => {
+      content.style.transform = `scale(${Math.min(1, Math.max(1, parent.clientWidth - 48) / Math.max(1, content.scrollWidth))})`;
+    };
+    const observer = new ResizeObserver(fit);
+    observer.observe(parent);
+    observer.observe(content);
+    fit();
+    return () => observer.disconnect();
+  }, [text]);
   // @handles get the accent color.
   const parts = text.split(/(@[\w.]+)/g);
   return (
     <div className="promo-text">
-      {parts.map((part, index) => (part.startsWith('@') ? <span key={index} className="promo-handle">{part}</span> : part))}
+      <span ref={ref} className="promo-text-content">{parts.map((part, index) => (part.startsWith('@') ? <span key={index} className="promo-handle">{part}</span> : part))}</span>
     </div>
   );
 }
@@ -168,11 +184,15 @@ export function Ticker() {
   const [ready, setReady] = useState(false);
   const [settings, setSettings] = useState<TickerSettings>(defaultSettings);
   const [scrollDuration, setScrollDuration] = useState(140);
+  const [repeatCount, setRepeatCount] = useState(1);
   const [previewOverride, setPreviewOverride] = useState<Partial<TickerSettings> | null>(null);
   const [scene, setScene] = useState<Scene>({ kind: 'news', run: 0 });
   const [leaving, setLeaving] = useState<Leaving | null>(null);
   const firstLoad = useRef(true);
   const groupRef = useRef<HTMLDivElement>(null);
+  const scrollPositions = useRef<Record<Segment, number>>({ news: 0, scores: 0 });
+  const poll = useRef(createJsonPoller());
+  const scoresReceivedAt = useRef(0);
 
   const isPreview = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('preview');
   const view: TickerSettings = previewOverride ? { ...settings, ...previewOverride } : settings;
@@ -188,9 +208,7 @@ export function Ticker() {
     try {
       // Preview mode (control panel) must never consume "play next" headlines meant for OBS.
       const consume = firstLoad.current && !new URLSearchParams(window.location.search).has('preview');
-      const response = await fetch(`/api/headlines${consume ? '?consumeNext=1' : ''}`, { cache: 'no-store' });
-      if (!response.ok) throw new Error();
-      const data = (await response.json()) as { headlines?: Headline[] };
+      const data = await poll.current<{ headlines?: Headline[] }>(`/api/headlines${consume ? '?consumeNext=1' : ''}`);
       // Always replace the list — keeping the old one when it came back empty left deleted
       // custom headlines on screen.
       if (Array.isArray(data.headlines)) setHeadlines(data.headlines);
@@ -202,8 +220,8 @@ export function Ticker() {
 
   const loadSettings = useCallback(async () => {
     try {
-      const response = await fetch('/api/settings', { cache: 'no-store' });
-      if (response.ok) setSettings({ ...defaultSettings, ...((await response.json()) as Partial<TickerSettings>) });
+      const data = await poll.current<Partial<TickerSettings>>('/api/settings');
+      setSettings({ ...defaultSettings, ...data });
     } catch {
       // keep current look
     }
@@ -211,11 +229,8 @@ export function Ticker() {
 
   const loadPromos = useCallback(async () => {
     try {
-      const response = await fetch('/api/promos', { cache: 'no-store' });
-      if (response.ok) {
-        const list = (await response.json()) as Promo[];
-        if (Array.isArray(list)) setPromos(list);
-      }
+      const list = await poll.current<Promo[]>('/api/promos');
+      if (Array.isArray(list)) setPromos(list);
     } catch {
       // keep current promos
     }
@@ -223,13 +238,14 @@ export function Ticker() {
 
   const loadScores = useCallback(async () => {
     try {
-      const response = await fetch('/api/scores', { cache: 'no-store' });
-      if (response.ok) {
-        const data = (await response.json()) as { games?: ScoreItem[] };
-        if (Array.isArray(data.games)) setGames(data.games);
+      const data = await poll.current<{ games?: ScoreItem[] }>('/api/scores');
+      if (Array.isArray(data.games)) {
+        setGames(data.games);
+        scoresReceivedAt.current = Date.now();
       }
     } catch {
-      // keep last scores
+      // An extended connection failure must not leave frozen scores presented as live forever.
+      if (Date.now() - scoresReceivedAt.current > 20 * 60_000) setGames([]);
     }
   }, []);
 
@@ -238,35 +254,50 @@ export function Ticker() {
   }, [loadNews, loadSettings, loadPromos]);
 
   useEffect(() => {
+    // Show the branded fallback promptly even if one upstream request never answers.
+    const startup = window.setTimeout(() => setReady(true), 2500);
     void Promise.allSettled([loadAll(), loadScores()]).then(() => setReady(true));
     const timer = window.setInterval(loadAll, POLL_MS);
     const scoresTimer = window.setInterval(loadScores, SCORES_POLL_MS);
     return () => {
       window.clearInterval(timer);
       window.clearInterval(scoresTimer);
+      window.clearTimeout(startup);
     };
   }, [loadAll, loadScores]);
 
   // ---- Promo files: preload each one; only promos that loaded fine ever go on air. ----
   const mediaState = useRef(new Map<string, { status: 'loading' | 'ready' | 'failed'; at: number }>());
+  const mediaCleanup = useRef(new Set<() => void>());
+  useEffect(() => () => { for (const cleanup of mediaCleanup.current) cleanup(); }, []);
   useEffect(() => {
     for (const promo of promos) {
-      if (promo.kind === 'text' || !promo.url) continue;
+      if (!promo.enabled || promo.kind === 'text' || !promo.url) continue;
       const url = promo.url;
       const known = mediaState.current.get(url);
       if (known && (known.status !== 'failed' || Date.now() - known.at < PROMO_RETRY_MS)) continue;
       mediaState.current.set(url, { status: 'loading', at: Date.now() });
+      let release = () => {};
+      const cleanup = () => {
+        window.clearTimeout(timer);
+        release();
+        mediaCleanup.current.delete(cleanup);
+      };
       const settle = (status: 'ready' | 'failed') => {
         if (mediaState.current.get(url)?.status === 'loading') mediaState.current.set(url, { status, at: Date.now() });
+        cleanup();
       };
-      window.setTimeout(() => settle('failed'), PROMO_LOAD_TIMEOUT_MS);
+      const timer = window.setTimeout(() => settle('failed'), PROMO_LOAD_TIMEOUT_MS);
+      mediaCleanup.current.add(cleanup);
       if (promo.kind === 'image') {
         const image = new Image();
+        release = () => { image.onload = null; image.onerror = null; image.removeAttribute('src'); };
         image.onload = () => settle('ready');
         image.onerror = () => settle('failed');
         image.src = url;
       } else {
         const video = document.createElement('video');
+        release = () => { video.oncanplaythrough = null; video.onerror = null; video.removeAttribute('src'); video.load(); };
         video.muted = true;
         video.preload = 'auto';
         video.oncanplaythrough = () => settle('ready');
@@ -283,6 +314,7 @@ export function Ticker() {
   const forcedPromo = useRef<Promo | null>(null);
   const manualSkip = useRef(false);
   const promoIndex = useRef(0);
+  const failedPromo = useRef<number | null>(null);
 
   const pickPromo = useCallback((): Promo | null => {
     if (forcedPromo.current) {
@@ -305,24 +337,28 @@ export function Ticker() {
   useEffect(() => {
     if (!ready) return;
     let cancelled = false;
-    const timers: number[] = [];
-    const wait = (ms: number, hook?: { current: (() => void) | null }) =>
-      new Promise<void>((resolve) => {
-        const done = () => {
-          if (hook) hook.current = null;
-          resolve();
-        };
-        timers.push(window.setTimeout(done, ms));
-        if (hook) hook.current = done;
-      });
+    const waiter = createSceneWaiter();
+    const wait = waiter.wait;
     const hasScores = () => live.current.view.scoresEnabled && live.current.games.length > 0;
     let runId = 0;
     // Crossfade: the old scene fades out while the new one fades in on top, so the bar is never empty.
     let showing: Scene = live.current.scene;
     const crossfadeTo = async (to: Scene) => {
+      const group = groupRef.current;
+      const track = group?.parentElement;
+      const displayedSegment = track?.dataset.segment as Segment | undefined;
+      if (group && track && displayedSegment && group.scrollWidth > 0) {
+        const transform = getComputedStyle(track).transform;
+        const offset = transform === 'none' ? 0 : Math.abs(new DOMMatrixReadOnly(transform).m41);
+        scrollPositions.current[displayedSegment] = offset % group.scrollWidth;
+      }
+      // Resume each strip across promo/score breaks; otherwise short segments starve later items.
+      const incoming: Scene = to.kind === 'promo' ? to : {
+        ...to, offset: showing.kind === to.kind ? 0 : scrollPositions.current[to.kind],
+      };
       setLeaving({ scene: showing, duration: live.current.scrollDuration });
-      setScene(to);
-      showing = to;
+      setScene(incoming);
+      showing = incoming;
       await wait(FADE_MS);
       if (!cancelled) setLeaving(null);
     };
@@ -343,7 +379,9 @@ export function Ticker() {
         if (promo) {
           await crossfadeTo({ kind: 'promo', promo, run: (runId += 1) });
           if (cancelled) return;
-          await wait(Math.max(live.current.view.promoSeconds, 2) * 1000, endPromo);
+          // A media error may arrive during the entrance fade, before endPromo is installed.
+          if (failedPromo.current !== promo.id) await wait(Math.max(live.current.view.promoSeconds, 2) * 1000, endPromo);
+          failedPromo.current = null;
           if (cancelled) return;
         }
         current = next;
@@ -353,12 +391,19 @@ export function Ticker() {
     void run();
     return () => {
       cancelled = true;
-      timers.forEach((timer) => window.clearTimeout(timer));
+      waiter.cancel();
     };
   }, [ready, pickPromo]);
 
   // A promo whose file breaks while on air ends early (fades straight to the next segment).
-  const promoFailed = useCallback(() => endPromo.current?.(), []);
+  const promoFailed = useCallback(() => {
+    const current = live.current.scene;
+    if (current.kind === 'promo') {
+      failedPromo.current = current.promo.id;
+      if (current.promo.url) mediaState.current.set(current.promo.url, { status: 'failed', at: Date.now() });
+    }
+    endPromo.current?.();
+  }, []);
 
   // "Skip ahead" button on the control panel: end the current segment or promo now. The normal
   // crossfade to whatever comes next follows. A press during a crossfade is ignored.
@@ -376,13 +421,11 @@ export function Ticker() {
     let lastSeq: number | null = null;
     const check = async () => {
       try {
-        const response = await fetch('/api/advance', { cache: 'no-store' });
-        if (!response.ok) return;
-        const { seq } = (await response.json()) as { seq: number | null };
+        const { seq } = await poll.current<{ seq: number | null }>('/api/advance');
         if (typeof seq !== 'number') return;
         // The first answer is only the starting point, so reloading OBS never skips by itself.
         if (lastSeq !== null && seq > lastSeq) advance();
-        lastSeq = seq;
+        lastSeq = Math.max(lastSeq ?? seq, seq);
       } catch {
         // missed one check; the next one catches up
       }
@@ -396,7 +439,7 @@ export function Ticker() {
   useEffect(() => {
     if (!isPreview || window.parent === window) return;
     const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
+      if (event.origin !== window.location.origin || event.source !== window.parent) return;
       const data = event.data as { type?: string; settings?: Partial<TickerSettings>; promo?: Promo } | null;
       if (data?.type === 'ticker-preview:settings' && data.settings) setPreviewOverride(data.settings);
       if (data?.type === 'ticker-preview:refresh') {
@@ -426,12 +469,20 @@ export function Ticker() {
   useEffect(() => {
     const group = groupRef.current;
     if (!group) return;
-    const measure = () => setScrollDuration(Math.max(group.scrollWidth / view.scrollSpeed, 8));
+    const measure = () => {
+      const unit = group.firstElementChild?.getBoundingClientRect().width ?? 0;
+      const viewport = group.closest('.ticker-window')?.clientWidth ?? window.innerWidth;
+      const repeats = unit > 0 ? Math.max(1, Math.ceil(viewport / unit)) : 1;
+      setRepeatCount(repeats);
+      setScrollDuration(Math.max(unit * repeats / view.scrollSpeed, 8));
+    };
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(group);
-    return () => observer.disconnect();
-  }, [segment, scene.run, headlines, games, view.scrollSpeed, view.fontSize, view.fontFamily]);
+    if (group.firstElementChild) observer.observe(group.firstElementChild);
+    window.addEventListener('resize', measure);
+    return () => { observer.disconnect(); window.removeEventListener('resize', measure); };
+  }, [ready, segment, scene.run, headlines, games, view.scrollSpeed, view.fontSize, view.fontFamily]);
 
   if (!ready) return null;
 
@@ -460,11 +511,11 @@ export function Ticker() {
           {layerScene.kind === 'promo' ? (
             <TextPromo text={layerScene.promo.text} />
           ) : layerSegment ? (
-            <div className="ticker-track">
-              <div ref={out ? undefined : groupRef} className="ticker-group">{items}</div>
-              <div className="ticker-group" aria-hidden="true">{items}</div>
+            <div className="ticker-track" data-segment={layerSegment} style={{ animationDelay: `${-(layerScene.offset ?? 0) / view.scrollSpeed}s` }}>
+              <div ref={out ? undefined : groupRef} className="ticker-group">{Array.from({ length: repeatCount }, (_, index) => <div className="ticker-unit" key={index}>{items}</div>)}</div>
+              <div className="ticker-group" aria-hidden="true">{Array.from({ length: repeatCount }, (_, index) => <div className="ticker-unit" key={index}>{items}</div>)}</div>
             </div>
-          ) : null}
+          ) : <TextPromo text="Welcome to Lasorda's Card House" />}
         </Quiet>
       </div>
     );
@@ -481,7 +532,7 @@ export function Ticker() {
             <video className="promo-media" src={promo.url ?? undefined} autoPlay muted loop playsInline onError={out ? undefined : promoFailed} />
           ) : (
             // oxlint-disable-next-line next/no-img-element
-            <img className="promo-media" src={promo.url ?? undefined} alt={promo.text} onError={out ? undefined : promoFailed} />
+            <img className="promo-media" src={promo.url ?? undefined} alt="" onError={(event) => { hideOnError(event); if (!out) promoFailed(); }} />
           )}
         </Quiet>
       </div>

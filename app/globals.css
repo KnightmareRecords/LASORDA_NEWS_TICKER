@@ -114,6 +114,7 @@ button, input { font: inherit; }
 .ticker-window { position: relative; z-index: 1; min-width: 0; flex: 1; margin-left: calc(var(--slant) * -1); padding-left: var(--slant); overflow: hidden; background: color-mix(in srgb, var(--ticker-background, #0a0e16) 97%, transparent); border-block: 2px solid var(--ticker-accent, #ffb000); }
 .ticker-track { display: flex; width: max-content; height: 100%; animation: ticker-scroll var(--ticker-duration, 140s) linear infinite; will-change: transform; }
 .ticker-group { display: flex; align-items: center; flex-shrink: 0; }
+.ticker-unit { display: flex; align-items: center; flex-shrink: 0; }
 .ticker-item { display: inline-flex; align-items: center; gap: 12px; padding-left: 22px; white-space: nowrap; font-size: var(--ticker-size, 25px); font-weight: 650; letter-spacing: -.02em; }
 .ticker-item strong { color: var(--ticker-accent, #ffb000); font-size: calc(var(--ticker-size, 25px) * .46); letter-spacing: .14em; }
 .ticker-item strong.source-live { border-radius: 3px; background: var(--ticker-accent, #ffb000); color: #090c12; padding: .25em .5em; }
@@ -192,6 +193,7 @@ button, input { font: inherit; }
   text-transform: uppercase;
 }
 .promo-handle { margin: 0 .3em; color: var(--ticker-accent, #ffb000); text-transform: none; }
+.promo-text-content { display: block; flex-shrink: 0; transform-origin: center; }
 /* Fills the source and trims the sides evenly if the file is wider (a 1920-wide banner in a 1080-wide source stays centered). */
 .promo-media { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 

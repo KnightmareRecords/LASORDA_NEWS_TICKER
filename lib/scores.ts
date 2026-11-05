@@ -1,6 +1,6 @@
 // Game scores from ESPN's public scoreboards (the same data espn.com uses; not an official API,
 // so every step here fails quietly: a league that errors or changes shape is simply left out).
-import { TEAMS, type League, type Team } from './teams';
+import { COLLEGE_BY_ESPN_ID, TEAMS, type League, type Team } from './teams';
 
 export type ScoreLeague = League | 'CFB' | 'CBB';
 export type ScoreSide = { abbr: string; score: string | null; team: string | null; logo: string | null; rank: number | null; winner: boolean };
@@ -45,8 +45,9 @@ const ABBR_FIX: Record<string, string> = {
   'MLB:CHW': 'CWS', 'MLB:OAK': 'ATH', 'MLB:AZ': 'ARI',
 };
 
-function findTeam(league: ScoreLeague, abbr: string, nickname: string): Team | null {
-  if (league === 'CFB' || league === 'CBB') return null;
+function findTeam(league: ScoreLeague, abbr: string, nickname: string, espnId?: string): Team | null {
+  // Major college programs are matched by ESPN team id (lib/college-teams.ts); other schools have no panel.
+  if (league === 'CFB' || league === 'CBB') return (espnId && COLLEGE_BY_ESPN_ID.get(espnId)) || null;
   const inLeague = TEAMS.filter((team) => team.league === league);
   const key = `${league.toLowerCase()}-${(ABBR_FIX[`${league}:${abbr}`] ?? abbr).toLowerCase()}`;
   return inLeague.find((team) => team.key === key) ?? inLeague.find((team) => team.name.toLowerCase() === nickname.toLowerCase()) ?? null;
@@ -68,7 +69,7 @@ type EspnCompetitor = {
   score?: string;
   winner?: boolean;
   curatedRank?: { current?: number };
-  team?: { abbreviation?: string; name?: string; shortDisplayName?: string; logo?: string };
+  team?: { id?: string; abbreviation?: string; name?: string; shortDisplayName?: string; logo?: string };
 };
 type EspnEvent = {
   id?: string;
@@ -80,14 +81,15 @@ type EspnEvent = {
 function side(league: ScoreLeague, raw: EspnCompetitor | undefined, showScore: boolean): ScoreSide | null {
   const abbr = raw?.team?.abbreviation?.trim();
   if (!abbr) return null;
-  const team = findTeam(league, abbr, raw?.team?.name ?? raw?.team?.shortDisplayName ?? '');
+  const team = findTeam(league, abbr, raw?.team?.name ?? raw?.team?.shortDisplayName ?? '', raw?.team?.id ? String(raw.team.id) : undefined);
   const rank = raw?.curatedRank?.current;
   const logo = raw?.team?.logo;
   return {
-    abbr: abbr.slice(0, 6),
+    // College teams use our short names ("UM" rather than ESPN's "MIA").
+    abbr: (team?.short ?? abbr).slice(0, 6),
     score: showScore && raw?.score != null && /^\d{1,3}$/.test(String(raw.score)) ? String(raw.score) : null,
     team: team?.key ?? null,
-    // College logos come from ESPN's image server (we have no local college logos); pro teams use ours.
+    // Our teams (pro + major college) use local logos; other schools use ESPN's image server.
     logo: !team && typeof logo === 'string' && logo.startsWith('https://a.espncdn.com/') ? logo : null,
     rank: typeof rank === 'number' && rank >= 1 && rank <= 25 ? rank : null,
     winner: Boolean(raw?.winner),
@@ -163,6 +165,9 @@ export async function getScores(now = Date.now()) {
   items.sort((a, b) => ORDER[a.state] - ORDER[b.state] || (a.state === 'final' ? b.start - a.start : a.state === 'upcoming' ? a.start - b.start : 0));
   return {
     games: items.slice(0, MAX_ITEMS),
-    leagues: SOURCES.map(({ league }) => ({ league, ok: Boolean(cache.get(league)?.fetchedAt), games: items.filter((item) => item.league === league).length })),
+    leagues: SOURCES.map(({ league }) => {
+      const entry = cache.get(league);
+      return { league, ok: Boolean(entry?.fetchedAt && entry.tried === entry.fetchedAt && now - entry.fetchedAt < STALE_MAX_MS), games: items.filter((item) => item.league === league).length };
+    }),
   };
 }

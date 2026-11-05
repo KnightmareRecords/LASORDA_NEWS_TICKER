@@ -8,6 +8,7 @@ const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin']
 export const metadata: Metadata = {
   title: 'Live Ticker Control',
   description: 'Manage RSS and custom headlines for an OBS browser source.',
+  icons: { icon: '/favicon.svg' },
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {

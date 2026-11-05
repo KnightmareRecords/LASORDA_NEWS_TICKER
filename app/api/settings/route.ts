@@ -1,5 +1,6 @@
 import { env } from 'cloudflare:workers';
 import { isAdmin, unauthorized } from '@/lib/admin-auth';
+import { readJsonObject } from '@/lib/request-body';
 
 export const dynamic = 'force-dynamic';
 
@@ -51,7 +52,7 @@ export async function GET() {
 
 export async function PATCH(request: Request) {
   if (!isAdmin(request)) return unauthorized();
-  const body = (await request.json()) as Record<string, unknown>;
+  const body = await readJsonObject(request);
   if (!isSafeFeedUrl(body.feedUrl)) {
     return Response.json({ error: 'Enter a valid public RSS or Atom URL.' }, { status: 400 });
   }

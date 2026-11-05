@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { isAdmin, unauthorized } from '@/lib/admin-auth';
 import { cleanPromoText } from '@/lib/promos';
+import { readJsonObject } from '@/lib/request-body';
 
 export const dynamic = 'force-dynamic';
 
@@ -8,7 +9,7 @@ export async function PATCH(request: Request, context: { params: Promise<{ id: s
   if (!isAdmin(request)) return unauthorized();
   const numericId = Number((await context.params).id);
   if (!Number.isInteger(numericId)) return Response.json({ error: 'Invalid id.' }, { status: 400 });
-  const body = (await request.json().catch(() => ({}))) as { enabled?: unknown; text?: unknown };
+  const body = await readJsonObject(request);
   if (typeof body.enabled === 'boolean') {
     await env.DB.prepare('UPDATE promos SET enabled = ? WHERE id = ?').bind(body.enabled ? 1 : 0, numericId).run();
   }

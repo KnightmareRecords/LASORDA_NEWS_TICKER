@@ -1,7 +1,7 @@
 import { env } from 'cloudflare:workers';
-import { detectTeam } from '@/lib/teams';
+import { detectTeam, isCollegeLink, type StoryContext } from '@/lib/teams';
 import { AI_PROMPT_VERSION, summarizeStory } from '@/lib/ai-summary';
-import { spreadTeamItems } from '@/lib/mix';
+import { mixHeadlines, spreadTeamItems } from '@/lib/mix';
 import { isFeatureStory } from '@/lib/news-filter';
 
 export const dynamic = 'force-dynamic';
@@ -63,7 +63,8 @@ function pickStory(title: string, summary: string) {
 }
 
 /** `story` is the full story text (for AI); `text` is the trimmed version that airs without AI. */
-type FeedItem = { id: string; text: string; story: string; title: string };
+/** `link`: the story's web address — ESPN's says which sport it is (…/college-football/…). */
+type FeedItem = { id: string; text: string; story: string; title: string; link: string };
 type CachedFeed = { items: FeedItem[]; fetchedAt: number; lastFailureAt: number; lastError: string | null };
 
 // Feed sites (Google News especially) rate-limit frequent requests. Every OBS ticker and control
@@ -79,7 +80,21 @@ function describeFeedError(error: unknown) {
   return error instanceof Error ? error.message : 'The feed could not be loaded.';
 }
 
+const feedInFlight = new Map<string, Promise<{ items: FeedItem[]; ageMs: number; error: string | null }>>();
+
 async function getCachedFeed(feedUrl: string) {
+  const pending = feedInFlight.get(feedUrl);
+  if (pending) return pending;
+  const request = refreshFeed(feedUrl);
+  feedInFlight.set(feedUrl, request);
+  try {
+    return await request;
+  } finally {
+    feedInFlight.delete(feedUrl);
+  }
+}
+
+async function refreshFeed(feedUrl: string) {
   const now = Date.now();
   const cached = feedCache.get(feedUrl);
   const usable = cached && cached.items.length > 0 && now - cached.fetchedAt < KEEP_STALE_FOR_MS ? cached : null;
@@ -135,6 +150,8 @@ async function fetchFeedXml(feedUrl: string) {
   throw new Error(`The feed site didn’t send a feed (${unique}).`);
 }
 
+const storyContext = (item: FeedItem): StoryContext => ({ college: isCollegeLink(item.link) });
+
 async function getFeedHeadlines(feedUrl: string): Promise<FeedItem[]> {
   const xml = await fetchFeedXml(feedUrl);
   const entries = [...xml.matchAll(/<(?:item|entry)(?:\s[^>]*)?>([\s\S]*?)<\/(?:item|entry)>/gi)];
@@ -144,8 +161,10 @@ async function getFeedHeadlines(feedUrl: string): Promise<FeedItem[]> {
       const title = match[1].match(/<title(?:\s[^>]*)?>([\s\S]*?)<\/title>/i)?.[1] ?? '';
       const summary = match[1].match(/<(description|summary)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/i)?.[2] ?? '';
       const guid = match[1].match(/<(?:guid|id)(?:\s[^>]*)?>([\s\S]*?)<\/(?:guid|id)>/i)?.[1] ?? `feed-${index}`;
+      // RSS: <link>url</link>; Atom: <link href="url"/>.
+      const link = match[1].match(/<link(?:\s[^>]*)?>([\s\S]*?)<\/link>/i)?.[1] ?? match[1].match(/<link[^>]*\shref="([^"]+)"/i)?.[1] ?? '';
       const story = pickStory(decodeXml(title), decodeXml(summary));
-      return { id: decodeXml(guid), text: shorten(story), story, title: decodeXml(title) };
+      return { id: decodeXml(guid), text: shorten(story), story, title: decodeXml(title), link: decodeXml(link) };
     })
     .filter((item) => item.text);
 }
@@ -171,8 +190,15 @@ function storyKey(item: FeedItem) {
   return `v${AI_PROMPT_VERSION}:${item.id}#${(hash >>> 0).toString(16)}`;
 }
 
-function withTimeout<T>(promise: Promise<T>, ms: number) {
-  return Promise.race([promise, new Promise<never>((_, reject) => setTimeout(() => reject(new Error('The AI service took too long.')), ms))]);
+async function withTimeout<T>(promise: Promise<T>, ms: number) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([promise, new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error('The AI service took too long.')), ms);
+    })]);
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 async function getAiLines(items: FeedItem[]) {
@@ -247,7 +273,16 @@ export async function GET(request: Request) {
   // The headline is checked too: ESPN's teaser headlines often give a feature away.
   const newsItems = result.items.filter((item) => !isFeatureStory(item.story) && !isFeatureStory(item.title ?? ''));
   const skippedByRules = result.items.length - newsItems.length;
-  const ai = aiEnabled && newsItems.length ? await getAiLines(newsItems) : null;
+  // A missing/busy AI cache must not take custom announcements and plain news off air.
+  let ai: Awaited<ReturnType<typeof getAiLines>> | null = null;
+  let aiError: string | null = null;
+  if (aiEnabled && newsItems.length) {
+    try {
+      ai = await getAiLines(newsItems);
+    } catch {
+      aiError = 'AI summaries are temporarily unavailable. Showing eligible original stories.';
+    }
+  }
 
   // AI line + AI-picked team when it passed the safety checks; otherwise the trimmed story text,
   // with the team panel of the first team the story mentions. Stories the AI couldn't shorten
@@ -261,7 +296,10 @@ export async function GET(request: Request) {
       id: item.id,
       text: useAi ? entry.line! : item.text,
       source: feedLabel,
-      team: (useAi && entry.team) || detectTeam(item.story)?.key || null,
+      // The summary often names only the player ("Jalen Hurts …") while the headline names the team
+      // ("… at Eagles facility"), so the headline is the fallback.
+      // College stories (ESPN college link) also match bare school names ("Miami star …" → UM).
+      team: (useAi && entry.team) || detectTeam(item.story, storyContext(item))?.key || detectTeam(item.title, storyContext(item))?.key || null,
       tag: null,
     }];
   }));
@@ -274,12 +312,7 @@ export async function GET(request: Request) {
   const toHeadline = (item: CustomRow): Headline => ({ id: `custom-${item.id}`, text: item.text, source: 'LIVE', team: item.team, tag: item.tag });
   const next = custom.filter((item) => item.placement === 'next').map(toHeadline);
   const rotation = custom.filter((item) => item.placement === 'rotation').map(toHeadline);
-  const mixed: Headline[] = [...next];
-  feed.forEach((item, index) => {
-    mixed.push(item);
-    if ((index + 1) % 4 === 0 && rotation.length) mixed.push(rotation[Math.floor(index / 4) % rotation.length]);
-  });
-  if (!feed.length) mixed.push(...rotation);
+  const mixed = mixHeadlines(feed, rotation, next);
 
   if (consumeNext && next.length) {
     const ids = custom.filter((item) => item.placement === 'next').map((item) => item.id);
@@ -287,5 +320,5 @@ export async function GET(request: Request) {
     await env.DB.prepare(`UPDATE custom_headlines SET placement = 'rotation' WHERE id IN (${placeholders})`).bind(...ids).run();
   }
 
-  return Response.json({ headlines: mixed, feedAvailable, feedError, feedStale, feedAgeSeconds, feedUrl, ai: ai ? { ...ai.stats, skipped: skippedByRules + ai.stats.features } : { off: true, skipped: skippedByRules }, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ headlines: mixed, feedAvailable, feedError, feedStale, feedAgeSeconds, feedUrl, ai: ai ? { ...ai.stats, skipped: skippedByRules + ai.stats.features } : { off: !aiEnabled, error: aiError, skipped: skippedByRules }, updatedAt: Date.now() }, { headers: { 'Cache-Control': 'no-store' } });
 }

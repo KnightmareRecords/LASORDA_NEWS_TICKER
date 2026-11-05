@@ -1,11 +1,20 @@
 // Team colors for ticker team panels. Colors are each team's primary/secondary as commonly
 // published; tweak any entry here if a shade looks off on stream.
 // Only team names and colors are used — no official logos or wordmarks (trademarks).
+// College teams (major conferences) come from lib/college-teams.ts, generated from ESPN.
+import { COLLEGE_TEAMS } from './college-teams';
 
+/** Pro leagues. */
 export type League = 'NFL' | 'NBA' | 'MLB' | 'NHL';
+/** Pro leagues plus major college programs ('NCAA'). */
+export type TeamLeague = League | 'NCAA';
 export type Team = {
   key: string;
-  league: League;
+  league: TeamLeague;
+  /** Short name shown on the panel instead of the nickname (college: "UM", "ASU", "UCLA"). */
+  short?: string;
+  /** ESPN team id (college), used to match ESPN scoreboards. */
+  espnId?: string;
   city: string;
   name: string;
   primary: string;
@@ -158,7 +167,36 @@ export const TEAMS: Team[] = [
   t('NHL', 'WPG', 'Winnipeg', 'Jets', '#041E42', '#004C97'),
 ];
 
+// Common short forms in news copy. Nicknames count anywhere unless shared; school forms only in college stories.
+const COLLEGE_NICKNAMES: Record<string, string[]> = {
+  'ncaa-nd': ['Irish'], 'ncaa-fsu': ['Noles'], 'ncaa-ala': ['Bama'], 'ncaa-neb': ['Huskers'], 'ncaa-ark': ['Hogs'],
+};
+const COLLEGE_SCHOOL_ALIASES: Record<string, string[]> = {
+  'ncaa-miz': ['Mizzou'], 'ncaa-pitt': ['Pitt'], 'ncaa-cal': ['Cal'], 'ncaa-unc': ['UNC'], 'ncaa-uva': ['UVA'],
+  'ncaa-ala': ['Bama'], 'ncaa-tamu': ['A&M'], 'ncaa-uconn': ['Connecticut'], 'ncaa-um': ['Miami (Fla.)'],
+};
+
+// Major college programs: city = school ("Miami", "Ohio State"), name = nickname ("Hurricanes").
+for (const college of COLLEGE_TEAMS) {
+  TEAMS.push({
+    key: college.key, league: 'NCAA', city: college.school, name: college.name, primary: college.primary, secondary: college.secondary,
+    short: college.abbr, espnId: college.espnId, aliases: COLLEGE_NICKNAMES[college.key], cityAliases: COLLEGE_SCHOOL_ALIASES[college.key],
+  });
+}
+
 export const TEAMS_BY_KEY = new Map(TEAMS.map((team) => [team.key, team]));
+export const COLLEGE_BY_ESPN_ID = new Map(TEAMS.filter((team) => team.espnId).map((team) => [team.espnId!, team]));
+
+/** Text on a team panel: the short name for college ("UM"), the nickname for pro teams ("Eagles"). */
+export function teamLabel(team: Team) {
+  return team.short ?? team.name;
+}
+
+/** Dropdown / list name: "UM — Miami Hurricanes", "Philadelphia Eagles". */
+export function teamFullName(team: Team) {
+  const full = team.city === team.name ? team.name : `${team.city} ${team.name}`;
+  return team.short ? `${team.short} — ${full}` : full;
+}
 
 /**
  * "Lasorda Logo" panel for custom headlines: shows Jay's secondary logo instead of a team.
@@ -207,7 +245,10 @@ const escape = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const nameCounts = new Map<string, number>();
 for (const team of TEAMS) for (const name of [team.name, ...(team.aliases ?? [])]) nameCounts.set(name, (nameCounts.get(name) ?? 0) + 1);
 
-type Matcher = { team: Team; regex: RegExp; name: string; ambiguous: boolean };
+type Matcher = { team: Team; regex: RegExp; name: string; ambiguous: boolean; full: boolean };
+
+// College nicknames that are everyday words: only count as "School Nickname" ("Syracuse Orange").
+const BARE_NICKNAME_BLOCK = new Set(['Orange', 'Cardinal']);
 
 // Case-sensitive on purpose: "Heat", "Magic", "Thunder", "Wild" only count as teams when capitalized.
 const wordRegex = (pattern: string) => new RegExp(`(?<![A-Za-z])${pattern}(?![A-Za-z])`);
@@ -218,24 +259,36 @@ const matchers: Matcher[] = TEAMS.flatMap((team) =>
     const cities = [team.city, ...(team.cityAliases ?? [])];
     return [
       // "Winnipeg Jets" — the city settles which team it is.
-      ...cities.map((city) => ({ team, regex: wordRegex(`${escape(city)} ${escape(name)}`), name, ambiguous: false })),
-      // "the Jets" — fine on its own unless another league uses the nickname too.
-      { team, regex: wordRegex(escape(name)), name, ambiguous },
+      ...cities.map((city) => ({ team, regex: wordRegex(`${escape(city)} ${escape(name)}`), name, ambiguous: false, full: true })),
+      // "the Jets" — fine on its own unless another team uses the nickname too.
+      ...(team.league === 'NCAA' && BARE_NICKNAME_BLOCK.has(name) ? [] : [{ team, regex: wordRegex(escape(name)), name, ambiguous, full: false }]),
     ];
   }),
 );
 
+// College school names on their own ("Miami", "Notre Dame") — only used for stories known to be about
+// college sports, longest first so "Texas Tech" is never read as "Texas".
+const schoolMatchers = TEAMS.filter((team) => team.league === 'NCAA')
+  .flatMap((team) => [team.city, ...(team.cityAliases ?? [])].map((school) => ({ team, school })))
+  .sort((a, b) => b.school.length - a.school.length)
+  .map(({ team, school }) => ({ team, regex: new RegExp(`(?<![A-Za-z])${escape(school)}(?![A-Za-z])`, 'g') }));
+
+/** Where the story comes from, if known. `college`: the story is about college sports (ESPN college link). */
+export type StoryContext = { college?: boolean };
+
 // Words that hint which league a story is about, used to settle a bare shared nickname ("the Jets").
-const LEAGUE_HINTS: Record<League, RegExp> = {
+const LEAGUE_HINTS: Record<TeamLeague, RegExp> = {
+  NCAA: /\b(?:college|NCAA|Heisman|CFP|College Football Playoff|March Madness|Final Four|bowl game|freshman|sophomore|redshirt|transfer portal|recruits?|SEC|Big Ten|Big 12|ACC|Big East)\b/gi,
   NHL: /\b(?:NHL|hockey|puck|goalie|goaltender|power[- ]play|shutout|hat trick|Stanley Cup|period|saves|goals?|skater|ice)\b/gi,
   NFL: /\b(?:NFL|touchdowns?|quarterback|QB|yards|Super Bowl|receiver|linebacker|cornerback|field goal|sacks?|interception|rushing|passing)\b/gi,
   NBA: /\b(?:NBA|rebounds|three-pointers?|3-pointers?|dunks?|triple-double|double-double|free throws?)\b/gi,
   MLB: /\b(?:MLB|innings?|home runs?|homers?|pitcher|pitched|bullpen|World Series|RBIs?|strikeouts?|closer|shortstop|outfielder)\b/gi,
 };
 
-function leagueScores(text: string) {
-  const scores = new Map<League, number>();
-  for (const [league, regex] of Object.entries(LEAGUE_HINTS) as [League, RegExp][]) scores.set(league, text.match(regex)?.length ?? 0);
+function leagueScores(text: string, context: StoryContext) {
+  const scores = new Map<TeamLeague, number>();
+  for (const [league, regex] of Object.entries(LEAGUE_HINTS) as [TeamLeague, RegExp][]) scores.set(league, text.match(regex)?.length ?? 0);
+  if (context.college) scores.set('NCAA', (scores.get('NCAA') ?? 0) + 3);
   return scores;
 }
 
@@ -244,42 +297,78 @@ function cleanForMatching(text: string) {
 }
 
 /** All teams a piece of news copy mentions, with the position of their first mention. */
-function findTeams(text: string): { team: Team; index: number }[] {
+function findTeams(text: string, context: StoryContext = {}): { team: Team; index: number }[] {
   const cleaned = cleanForMatching(text);
   const found = new Map<string, { team: Team; index: number }>();
+  const add = (team: Team, index: number) => {
+    const existing = found.get(team.key);
+    if (!existing || index < existing.index) found.set(team.key, { team, index });
+  };
   const ambiguousHits = new Map<string, { index: number; candidates: Team[] }>();
+  // Full names ("Miami Dolphins", "Miami Hurricanes") are blanked out afterwards, so the school
+  // pass below can't read the "Miami" in "Miami Dolphins" as the Hurricanes.
+  let masked = cleaned;
   for (const matcher of matchers) {
     const index = cleaned.search(matcher.regex);
     if (index === -1) continue;
+    if (matcher.full) {
+      masked = masked.replace(new RegExp(matcher.regex.source, 'g'), (hit) => ' '.repeat(hit.length));
+    }
     if (!matcher.ambiguous) {
-      const existing = found.get(matcher.team.key);
-      if (!existing || index < existing.index) found.set(matcher.team.key, { team: matcher.team, index });
+      add(matcher.team, index);
     } else {
       const hit = ambiguousHits.get(matcher.name) ?? { index, candidates: [] };
       hit.candidates.push(matcher.team);
       ambiguousHits.set(matcher.name, hit);
     }
   }
+  // College stories: bare school names count too ("Miami star … against Notre Dame").
+  if (context.college) {
+    for (const { team, regex } of schoolMatchers) {
+      masked = masked.replace(regex, (hit, offset: number) => {
+        add(team, offset);
+        return ' '.repeat(hit.length);
+      });
+    }
+  }
   // Settle bare shared nicknames: a candidate already named with its city wins; otherwise the
   // league the story's wording points to; otherwise skip it (better no panel than the wrong one).
-  let scores: Map<League, number> | null = null;
-  for (const { index, candidates } of ambiguousHits.values()) {
-    if (candidates.some((team) => found.has(team.key))) continue;
-    scores ??= leagueScores(cleaned);
+  // Outside college stories a shared nickname never means a college team ("Eagles" = Philadelphia).
+  let scores: Map<TeamLeague, number> | null = null;
+  for (const { index, candidates: all } of ambiguousHits.values()) {
+    if (all.some((team) => found.has(team.key))) continue;
+    const candidates = context.college ? all : all.filter((team) => team.league !== 'NCAA');
+    if (candidates.length === 0) continue;
+    if (candidates.length === 1) {
+      add(candidates[0], index);
+      continue;
+    }
+    scores ??= leagueScores(cleaned, context);
     const ranked = candidates.map((team) => ({ team, score: scores!.get(team.league) ?? 0 })).sort((a, b) => b.score - a.score);
-    if (ranked[0].score > 0 && ranked[0].score > (ranked[1]?.score ?? 0)) found.set(ranked[0].team.key, { team: ranked[0].team, index });
+    if (ranked[0].score > 0 && ranked[0].score > (ranked[1]?.score ?? 0)) add(ranked[0].team, index);
   }
-  return [...found.values()].sort((a, b) => a.index - b.index);
+  // A college story leads with its college team, any other story with its pro team, when it names both.
+  const preferCollege = Boolean(context.college);
+  return [...found.values()].sort((a, b) => {
+    const aFirst = (a.team.league === 'NCAA') === preferCollege ? 0 : 1;
+    const bFirst = (b.team.league === 'NCAA') === preferCollege ? 0 : 1;
+    return aFirst - bFirst || a.index - b.index;
+  });
 }
 
 /** Whether a piece of news copy mentions this team (same rules as detectTeam). */
-export function mentionsTeam(text: string, team: Team) {
-  return findTeams(text).some((hit) => hit.team.key === team.key);
+export function mentionsTeam(text: string, team: Team, context?: StoryContext) {
+  return findTeams(text, context).some((hit) => hit.team.key === team.key);
 }
 
 /** First team mentioned in a piece of news copy, if any. */
-export function detectTeam(text: string): Team | null {
-  return findTeams(text)[0]?.team ?? null;
+export function detectTeam(text: string, context?: StoryContext): Team | null {
+  return findTeams(text, context)[0]?.team ?? null;
+}
+
+/** Whether a story link points at ESPN's college sections (college-football, mens-college-basketball, …). */
+export function isCollegeLink(link: string | null | undefined) {
+  return typeof link === 'string' && /\/(?:college-football|mens-college-basketball|womens-college-basketball|college-sports|ncaa[a-z]*)\//i.test(link);
 }
 
 /** Teams a short name could refer to ("Jets" → NFL and NHL Jets; "Winnipeg Jets" → NHL Jets). */

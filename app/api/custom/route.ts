@@ -1,6 +1,7 @@
 import { env } from 'cloudflare:workers';
 import { isAdmin, unauthorized } from '@/lib/admin-auth';
 import { cleanTag, cleanTeam } from '@/lib/headline-fields';
+import { readJsonObject } from '@/lib/request-body';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,8 +14,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   if (!isAdmin(request)) return unauthorized();
-  const body = (await request.json()) as { text?: string; placement?: string; team?: unknown; tag?: unknown };
-  const headline = body.text?.trim().slice(0, 180);
+  const body = await readJsonObject(request);
+  const headline = typeof body.text === 'string' ? body.text.trim().slice(0, 180) : '';
   const placement = body.placement === 'next' ? 'next' : 'rotation';
   const team = cleanTeam(body.team);
   const tag = cleanTag(body.tag);

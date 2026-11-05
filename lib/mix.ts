@@ -1,3 +1,18 @@
+/** Include every custom announcement, even when the feed has fewer than four stories. */
+export function mixHeadlines<T>(feed: T[], rotation: T[], next: T[]): T[] {
+  const mixed = [...next];
+  let inserted = 0;
+  feed.forEach((item, index) => {
+    mixed.push(item);
+    if ((index + 1) % 4 === 0 && rotation.length) {
+      mixed.push(rotation[inserted % rotation.length]);
+      inserted += 1;
+    }
+  });
+  mixed.push(...rotation.slice(inserted));
+  return mixed;
+}
+
 /**
  * Spread items with a team panel evenly among generic items, so the ticker never runs a long
  * stretch of generic news. Each group keeps its original (feed) order.
