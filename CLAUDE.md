@@ -54,7 +54,7 @@ Note: `compatibility_date` must not be newer than what the installed wrangler su
 - Next feature work: not chosen yet — ask Jay.
 
 ## Change log
-- 2026-11-04: Ticker bar now centered vertically in the browser source (was pinned to the bottom) so Jay can drag it anywhere in OBS; control-panel preview shows the middle band of the 1080p frame. Local dev server is on port 3000 (`.claude/launch.json` added).
+- 2026-11-04: Ticker bar now centered vertically in the browser source (was pinned to the bottom) so Jay can drag it anywhere in OBS; control-panel preview shows the middle band of the 1080p frame. Local dev server is on port 3000 (`.claude/launch.json` added). Deployed (version 57f2c788).
 - 2026-11-04: Added `public/brand/lasordas-card-house-secondary.png` (Jay's light-gray transparent logo from `Lasorda Logos/`, scaled to 240px tall) so the "Lasorda Logo" panel now shows. Deployed from the office Mac with d81b20d + 4d3453a (version 50ec990d). Mac clone needed `npm install` first.
 - 2026-11-05: Logo block gets more light space on its left (padding 6→14px, badge +8px so the logo keeps its size). New "Lasorda Logo" choice at the top of the custom-headline Team panel list (key `lasorda`, `HOUSE_PANEL_KEY`): shows `public/brand/lasordas-card-house-secondary.png` (light-gray, transparent; Jay adds the file) instead of a team panel; never auto-detected on feed stories.
 - 2026-11-05: Deployed 1914573 + 8112ee2 from the office Mac (version c3270ab2; live = 49bc463 main). Mac set up: Node 26, wrangler logged in. Mac folder re-cloned with GitHub Desktop (was a ZIP copy).
