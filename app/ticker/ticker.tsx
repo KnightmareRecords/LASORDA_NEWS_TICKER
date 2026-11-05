@@ -133,7 +133,7 @@ export function Ticker() {
         {item.team === HOUSE_PANEL_KEY ? (
           <b className="ticker-house">
             {/* oxlint-disable-next-line next/no-img-element */}
-            <img src={HOUSE_PANEL_LOGO} alt="Lasorda's Card House" />
+            <img src={HOUSE_PANEL_LOGO} alt="Lasorda's Card House" onError={(event) => event.currentTarget.remove()} />
           </b>
         ) : team ? (
           <b className="ticker-team" style={{ '--team-bg': colors?.background, '--team-fg': colors?.text } as CSSProperties}>
