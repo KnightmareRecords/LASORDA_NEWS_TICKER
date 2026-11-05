@@ -5,7 +5,7 @@
 import { detectTeam, mentionsTeam, teamsNamed, type Team } from './teams';
 
 /** Bump when the prompt changes so stories get rewritten with the new instructions. */
-export const AI_PROMPT_VERSION = 5;
+export const AI_PROMPT_VERSION = 6;
 
 // Tried in order. Cloudflare retires models from time to time (llama-3.1-8b-instruct was retired
 // 2026-05-30), so if one is gone the next is used automatically. No OpenAI models (Jay's rule).
@@ -20,13 +20,14 @@ function isModelGone(error: unknown) {
   const message = error instanceof Error ? error.message : String(error);
   return /deprecat|5028|5007|no such model|model not found|not available|unknown model/i.test(message);
 }
-export const AI_MAX_LENGTH = 110;
+// Prompt asks for 70; a little slack so a 72-character line isn't thrown away.
+export const AI_MAX_LENGTH = 80;
 
 const SYSTEM_PROMPT = `You write lines for a live sports TV news ticker, like ESPN's BottomLine.
 Rewrite the story you are given as ONE short, factual line that makes sense on its own.
 
 Rules:
-- At most 90 characters.
+- At most 70 characters. Short and punchy, like a headline.
 - Start with who the story is about (the team or player), then what happened: the result, score, stat, signing, trade or injury.
 - Use ONLY facts stated in the story. Never add numbers, names, scores, dates or details that are not in it.
 - Normal capitalization: capitalize the first word and all names of people, teams and places.
@@ -45,7 +46,7 @@ LINE: Bills release safety C.J. Gardner-Johnson
 Story: Dylan Samberg scored in overtime as the Winnipeg Jets snapped a nine-game losing streak by storming back from a four-goal deficit.
 KIND: NEWS
 TEAM: Jets
-LINE: Winnipeg Jets rally from four goals down, win in overtime to snap nine-game skid
+LINE: Winnipeg Jets rally from four goals down to snap nine-game skid
 
 Story: Arizona State, picked third in the Big 12 preseason poll, beat Utah 31-17 on Saturday.
 KIND: NEWS

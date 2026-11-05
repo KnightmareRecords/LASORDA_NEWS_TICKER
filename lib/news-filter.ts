@@ -4,6 +4,9 @@
 
 const FEATURE_START = /^(?:here'?s|here are|we |we're |our |what |why |how |which |who |where |when |ranking |ranked:|the best|the worst|best |worst |find |get ready|before |a look|a conference-by-conference|inside |meet |everything |the (?:\d+|top) )/i;
 
+// Profile openers like "From reviving 'Kirko Chainz' to treating teammates to In-N-Out, Cousins is…"
+const FROM_TO_START = /^from\b.{3,90}?\bto\b.{3,90}?,/i;
+
 const FEATURE_WORDS = new RegExp(
   [
     String.raw`\bwe (?:look|break|rank|ranked|picked|made|asked|predict|polled|tracked|graded|identify|examine)`,
@@ -29,6 +32,17 @@ const FEATURE_WORDS = new RegExp(
     String.raw`\b(?:rank|ranks|ranked) after\b`,
     String.raw`\bcomposite ranks\b`,
     String.raw`\bfree agent class\b`,
+    // Added 2026-11-04 from stories that slipped through (opinion, profiles, teasers).
+    String.raw`\bbreaking down\b`,
+    String.raw`\bdubious list\b`,
+    String.raw`\bit'?s time to\b`,
+    String.raw`\bremains to be seen\b`,
+    String.raw`\blet'?s\b`,
+    String.raw`\bquietly\b`,
+    String.raw`\bshares? how\b`,
+    String.raw`\bhas the latest\b`,
+    String.raw`\bhere'?s the data\b`,
+    String.raw`\btransfer talk\b`,
   ].join('|'),
   'i',
 );
@@ -37,5 +51,5 @@ const FEATURE_WORDS = new RegExp(
 export function isFeatureStory(text: string) {
   const story = text.trim();
   if (story.includes('?')) return true;
-  return FEATURE_START.test(story) || FEATURE_WORDS.test(story);
+  return FEATURE_START.test(story) || FROM_TO_START.test(story) || FEATURE_WORDS.test(story);
 }

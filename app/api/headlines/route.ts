@@ -10,6 +10,8 @@ const DEFAULT_FEED = 'https://www.espn.com/espn/rss/news';
 // and anything still too long is cut at a word boundary.
 const TARGET_LENGTH = 150;
 const MAX_ITEM_LENGTH = 170;
+// A story the AI could not shorten airs as its original text only up to this length; longer ones are skipped.
+const ORIGINAL_MAX = 120;
 
 type Headline = { id: string; text: string; source: string; team: string | null; tag: string | null };
 type CustomRow = { id: number; text: string; placement: 'rotation' | 'next'; team: string | null; tag: string | null };
@@ -61,7 +63,7 @@ function pickStory(title: string, summary: string) {
 }
 
 /** `story` is the full story text (for AI); `text` is the trimmed version that airs without AI. */
-type FeedItem = { id: string; text: string; story: string };
+type FeedItem = { id: string; text: string; story: string; title: string };
 type CachedFeed = { items: FeedItem[]; fetchedAt: number; lastFailureAt: number; lastError: string | null };
 
 // Feed sites (Google News especially) rate-limit frequent requests. Every OBS ticker and control
@@ -143,7 +145,7 @@ async function getFeedHeadlines(feedUrl: string): Promise<FeedItem[]> {
       const summary = match[1].match(/<(description|summary)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/i)?.[2] ?? '';
       const guid = match[1].match(/<(?:guid|id)(?:\s[^>]*)?>([\s\S]*?)<\/(?:guid|id)>/i)?.[1] ?? `feed-${index}`;
       const story = pickStory(decodeXml(title), decodeXml(summary));
-      return { id: decodeXml(guid), text: shorten(story), story };
+      return { id: decodeXml(guid), text: shorten(story), story, title: decodeXml(title) };
     })
     .filter((item) => item.text);
 }
@@ -242,22 +244,26 @@ export async function GET(request: Request) {
   const result = await getCachedFeed(feedUrl);
   const aiEnabled = feedSettings?.aiSummaries !== 0;
   // Drop feature-style stories (rankings, previews, analysis) by wording first — no AI needed.
-  const newsItems = result.items.filter((item) => !isFeatureStory(item.story));
+  // The headline is checked too: ESPN's teaser headlines often give a feature away.
+  const newsItems = result.items.filter((item) => !isFeatureStory(item.story) && !isFeatureStory(item.title ?? ''));
   const skippedByRules = result.items.length - newsItems.length;
   const ai = aiEnabled && newsItems.length ? await getAiLines(newsItems) : null;
 
   // AI line + AI-picked team when it passed the safety checks; otherwise the trimmed story text,
-  // with the team panel of the first team the story mentions.
-  const feed: Headline[] = spreadTeamItems(newsItems.filter((item) => ai?.lines.get(item.id)?.status !== 'feature').map((item) => {
+  // with the team panel of the first team the story mentions. Stories the AI couldn't shorten
+  // (still waiting, rejected, or AI off) are left out while their text is longer than ORIGINAL_MAX.
+  const feed: Headline[] = spreadTeamItems(newsItems.flatMap((item) => {
     const entry = ai?.lines.get(item.id);
+    if (entry?.status === 'feature') return [];
     const useAi = entry?.status === 'ok' && entry.line;
-    return {
+    if (!useAi && item.text.length > ORIGINAL_MAX) return [];
+    return [{
       id: item.id,
       text: useAi ? entry.line! : item.text,
       source: feedLabel,
       team: (useAi && entry.team) || detectTeam(item.story)?.key || null,
       tag: null,
-    };
+    }];
   }));
   const feedAvailable = feed.length > 0;
   const feedError = result.error;
