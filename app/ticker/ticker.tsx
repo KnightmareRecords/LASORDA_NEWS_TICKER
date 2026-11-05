@@ -12,6 +12,11 @@ import type { Promo } from '@/lib/promos';
 type Headline = { id: string; text: string; source: string; team?: string | null; tag?: string | null };
 type Segment = 'news' | 'scores';
 type Scene = { kind: Segment; run: number } | { kind: 'promo'; promo: Promo; run: number };
+/** The scene fading out during a crossfade, with its scroll speed frozen so it doesn't jump. */
+type Leaving = { scene: Scene; duration: number };
+
+const isMediaPromo = (scene: Scene) => scene.kind === 'promo' && scene.promo.kind !== 'text' && Boolean(scene.promo.url);
+const sceneKey = (scene: Scene) => `${scene.kind}-${scene.run}`;
 
 const FADE_MS = 700;
 const POLL_MS = 15_000;
@@ -163,7 +168,7 @@ export function Ticker() {
   const [scrollDuration, setScrollDuration] = useState(140);
   const [previewOverride, setPreviewOverride] = useState<Partial<TickerSettings> | null>(null);
   const [scene, setScene] = useState<Scene>({ kind: 'news', run: 0 });
-  const [shown, setShown] = useState(true);
+  const [leaving, setLeaving] = useState<Leaving | null>(null);
   const firstLoad = useRef(true);
   const groupRef = useRef<HTMLDivElement>(null);
 
@@ -171,9 +176,9 @@ export function Ticker() {
   const view: TickerSettings = previewOverride ? { ...settings, ...previewOverride } : settings;
 
   // Latest data for the cycle loop, which runs outside React renders.
-  const live = useRef({ headlines, games, promos, view });
+  const live = useRef({ headlines, games, promos, view, scene, scrollDuration });
   useEffect(() => {
-    live.current = { headlines, games, promos, view };
+    live.current = { headlines, games, promos, view, scene, scrollDuration };
   });
 
   // Each source loads on its own and keeps its last good copy when a request fails.
@@ -308,11 +313,20 @@ export function Ticker() {
         if (hook) hook.current = done;
       });
     const hasScores = () => live.current.view.scoresEnabled && live.current.games.length > 0;
+    let runId = 0;
+    // Crossfade: the old scene fades out while the new one fades in on top, so the bar is never empty.
+    let showing: Scene = live.current.scene;
+    const crossfadeTo = async (to: Scene) => {
+      setLeaving({ scene: showing, duration: live.current.scrollDuration });
+      setScene(to);
+      showing = to;
+      await wait(FADE_MS);
+      if (!cancelled) setLeaving(null);
+    };
 
     async function run() {
-      // Starts on news (an empty news strip shows scores instead, see `segment` below).
+      // Starts on news (an empty news strip shows scores instead, see `segmentFor` below).
       let current: Segment = 'news';
-      let runId = 0;
       while (!cancelled) {
         await wait(Math.max(live.current.view.segmentSeconds, 10) * 1000, skipSegment);
         if (cancelled) return;
@@ -320,21 +334,14 @@ export function Ticker() {
         const promo = pickPromo();
         // Nothing to switch to and no promo: keep the strip scrolling without a break.
         if (!promo && next === current) continue;
-        setShown(false);
-        await wait(FADE_MS);
-        if (cancelled) return;
         if (promo) {
-          setScene({ kind: 'promo', promo, run: (runId += 1) });
-          setShown(true);
-          await wait(Math.max(live.current.view.promoSeconds, 2) * 1000 + FADE_MS, endPromo);
+          await crossfadeTo({ kind: 'promo', promo, run: (runId += 1) });
           if (cancelled) return;
-          setShown(false);
-          await wait(FADE_MS);
+          await wait(Math.max(live.current.view.promoSeconds, 2) * 1000, endPromo);
           if (cancelled) return;
         }
         current = next;
-        setScene({ kind: current, run: (runId += 1) });
-        setShown(true);
+        await crossfadeTo({ kind: current, run: (runId += 1) });
       }
     }
     void run();
@@ -370,12 +377,13 @@ export function Ticker() {
   }, [isPreview, loadAll, loadScores]);
 
   // Which strip to scroll. A segment with nothing in it shows the other one instead.
-  const segment: Segment | null =
-    scene.kind === 'promo' ? null
-      : scene.kind === 'scores' && view.scoresEnabled && games.length > 0 ? 'scores'
+  const segmentFor = (target: Scene): Segment | null =>
+    target.kind === 'promo' ? null
+      : target.kind === 'scores' && view.scoresEnabled && games.length > 0 ? 'scores'
         : headlines.length > 0 ? 'news'
           : view.scoresEnabled && games.length > 0 ? 'scores'
             : null;
+  const segment = segmentFor(scene);
 
   useEffect(() => {
     const group = groupRef.current;
@@ -395,46 +403,61 @@ export function Ticker() {
     '--ticker-text': view.textColor,
     '--ticker-font': view.fontFamily === 'Geist' ? 'var(--font-geist-sans)' : view.fontFamily,
     '--ticker-size': `${view.fontSize}px`,
-    '--ticker-duration': `${scrollDuration}s`,
     '--fade-ms': `${FADE_MS}ms`,
   } as CSSProperties;
 
-  const stageClass = `ticker-stage${shown ? ' is-shown' : ''}`;
+  // Both the scene fading out (if any) and the current one, oldest first so the new one is on top.
+  const layers = [
+    ...(leaving ? [{ scene: leaving.scene, duration: leaving.duration, out: true }] : []),
+    { scene, duration: scrollDuration, out: false },
+  ];
 
-  // Uploaded image / GIF / video: fills the whole 1920×60 browser source.
-  if (scene.kind === 'promo' && scene.promo.kind !== 'text' && scene.promo.url) {
-    const { promo } = scene;
+  // Strip contents (news, scores, text promo) crossfade inside the bar; the logo block stays put.
+  const stripLayers = layers.filter((layer) => !isMediaPromo(layer.scene)).map(({ scene: layerScene, duration, out }) => {
+    const layerSegment = segmentFor(layerScene);
+    const items = layerSegment === 'scores' ? <ScoreItems games={games} /> : <NewsItems headlines={headlines} />;
     return (
-      <div className={stageClass} style={shellStyle} key={`promo-${scene.run}`}>
-        <Quiet onError={promoFailed}>
+      <div key={sceneKey(layerScene)} className={`strip-layer ${out ? 'is-leaving' : 'is-entering'}`} style={{ '--ticker-duration': `${duration}s` } as CSSProperties}>
+        <Quiet key={layerSegment ?? 'none'} onError={out ? undefined : promoFailed}>
+          {layerScene.kind === 'promo' ? (
+            <TextPromo text={layerScene.promo.text} />
+          ) : layerSegment ? (
+            <div className="ticker-track">
+              <div ref={out ? undefined : groupRef} className="ticker-group">{items}</div>
+              <div className="ticker-group" aria-hidden="true">{items}</div>
+            </div>
+          ) : null}
+        </Quiet>
+      </div>
+    );
+  });
+
+  // Uploaded image / GIF / video promos fill the whole 1920×60 browser source, over the bar.
+  const mediaLayers = layers.filter((layer) => isMediaPromo(layer.scene)).map(({ scene: layerScene, out }) => {
+    if (layerScene.kind !== 'promo' || !layerScene.promo.url) return null;
+    const { promo } = layerScene;
+    return (
+      <div key={sceneKey(layerScene)} className={`media-layer ${out ? 'is-leaving' : 'is-entering'}`}>
+        <Quiet onError={out ? undefined : promoFailed}>
           {promo.kind === 'video' ? (
-            <video className="promo-media" src={promo.url ?? undefined} autoPlay muted loop playsInline onError={promoFailed} />
+            <video className="promo-media" src={promo.url ?? undefined} autoPlay muted loop playsInline onError={out ? undefined : promoFailed} />
           ) : (
             // oxlint-disable-next-line next/no-img-element
-            <img className="promo-media" src={promo.url ?? undefined} alt={promo.text} onError={promoFailed} />
+            <img className="promo-media" src={promo.url ?? undefined} alt={promo.text} onError={out ? undefined : promoFailed} />
           )}
         </Quiet>
       </div>
     );
-  }
+  });
 
   return (
-    <div className={stageClass} style={shellStyle} key={scene.kind === 'promo' ? `promo-${scene.run}` : `seg-${scene.run}`}>
-      <main className="ticker-shell" aria-label="Live sports ticker">
+    <div className="ticker-stage" style={shellStyle}>
+      {/* The bar fades out under a full-size media promo and back in after it. */}
+      <main className={`ticker-shell${isMediaPromo(scene) ? ' is-hidden' : ''}`} aria-label="Live sports ticker">
         <Brand />
-        <div className="ticker-window">
-          <Quiet key={`${scene.run}-${segment}`} onError={promoFailed}>
-            {scene.kind === 'promo' ? (
-              <TextPromo text={scene.promo.text} />
-            ) : segment ? (
-              <div className="ticker-track">
-                <div ref={groupRef} className="ticker-group">{segment === 'scores' ? <ScoreItems games={games} /> : <NewsItems headlines={headlines} />}</div>
-                <div className="ticker-group" aria-hidden="true">{segment === 'scores' ? <ScoreItems games={games} /> : <NewsItems headlines={headlines} />}</div>
-              </div>
-            ) : null}
-          </Quiet>
-        </div>
+        <div className="ticker-window">{stripLayers}</div>
       </main>
+      {mediaLayers}
     </div>
   );
 }
