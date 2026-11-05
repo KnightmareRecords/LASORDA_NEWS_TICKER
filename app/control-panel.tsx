@@ -562,7 +562,7 @@ export function ControlPanel() {
                   <span className="mb-2 block text-sm font-medium text-slate-200">Image, GIF or video</span>
                   <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadPromo(file); }} />
                   <Button type="button" variant="outline" disabled={promoBusy || !adminKey} onClick={() => fileRef.current?.click()} className="h-10 border-white/15 bg-white/5 text-white hover:bg-white/10"><Upload /> {promoBusy ? 'Working…' : 'Upload file'}</Button>
-                  <p className="mt-1.5 text-xs text-slate-500">Make it 1920 × 60 so it fills the ticker. PNG, JPG, GIF, WebP, MP4 or WebM, up to 25 MB. Videos play muted.</p>
+                  <p className="mt-1.5 text-xs text-slate-500">Make it the same size as your OBS browser source: 1080 × 60 for a vertical stream, 1920 × 60 for horizontal. Wider files are trimmed evenly on both sides, so keep the message in the middle. PNG, JPG, GIF, WebP, MP4 or WebM, up to 25 MB. Videos play muted.</p>
                 </div>
               </form>
 
@@ -749,7 +749,7 @@ export function ControlPanel() {
               <h2 className="font-semibold">OBS setup</h2>
               <ol className="mt-4 space-y-3 text-sm leading-6 text-slate-400">
                 <li><span className="mr-2 font-mono text-[#ffb000]">01</span> Add a Browser Source to your scene.</li>
-                <li><span className="mr-2 font-mono text-[#ffb000]">02</span> Use the ticker URL and set width to 1920, height to 60. The bar sits in the middle of the source, so drag the source wherever you want it on screen. A smaller text size makes it slimmer.</li>
+                <li><span className="mr-2 font-mono text-[#ffb000]">02</span> Use the ticker URL and set the width to your canvas width (1080 for a vertical 1080 × 1920 stream, 1920 for horizontal) and the height to 60. The bar sits in the middle of the source, so drag the source wherever you want it on screen. A smaller text size makes it slimmer.</li>
                 <li><span className="mr-2 font-mono text-[#ffb000]">03</span> Position it along the bottom edge.</li>
               </ol>
               <div className="mt-5 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-emerald-200/80">The overlay background is transparent. News headlines refresh every 15 minutes; your custom changes reach OBS within 15 seconds.</div>
@@ -765,15 +765,39 @@ export function ControlPanel() {
   );
 }
 
-const STAGE_WIDTH = 1920;
-const STAGE_HEIGHT = 1080;
-// Show only the middle band of the 1080p frame (where the ticker lives) so the preview stays compact.
+// Stream canvas shapes. The preview shows only the middle band of the frame (where the ticker lives)
+// so it stays compact. Vertical = phone-style 1080 x 1920 canvas (eBay Live).
+const STAGES = {
+  vertical: { width: 1080, height: 1920, label: 'Vertical 1080 x 1920' },
+  horizontal: { width: 1920, height: 1080, label: 'Horizontal 1920 x 1080' },
+} as const;
+type StageShape = keyof typeof STAGES;
 const VISIBLE_HEIGHT = 360;
 
 function PreviewStage({ frameRef, unsaved, feedChanged, adminKey, onError }: { frameRef: RefObject<HTMLIFrameElement | null>; unsaved: boolean; feedChanged: boolean; adminKey: string; onError: (message: string) => void }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.5);
   const [skip, setSkip] = useState<'idle' | 'sending' | 'sent'>('idle');
+  const [shape, setShape] = useState<StageShape>('vertical');
+  const stage = STAGES[shape];
+
+  // Remember the chosen shape in this browser (a convenience; the default is vertical).
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem('ticker-preview-shape');
+      if (saved === 'horizontal' || saved === 'vertical') setShape(saved);
+    } catch {
+      // storage blocked: keep the default
+    }
+  }, []);
+  function chooseShape(next: StageShape) {
+    setShape(next);
+    try {
+      window.localStorage.setItem('ticker-preview-shape', next);
+    } catch {
+      // not remembered, still works
+    }
+  }
 
   // "Skip ahead": OBS (and this preview) check every 3 seconds and crossfade to the next part.
   async function skipAhead() {
@@ -793,10 +817,10 @@ function PreviewStage({ frameRef, unsaved, feedChanged, adminKey, onError }: { f
     const box = boxRef.current;
     if (!box) return;
     // ResizeObserver fires once on observe(), so this also sets the initial scale.
-    const observer = new ResizeObserver(() => setScale(box.clientWidth / STAGE_WIDTH));
+    const observer = new ResizeObserver(() => setScale(box.clientWidth / stage.width));
     observer.observe(box);
     return () => observer.disconnect();
-  }, []);
+  }, [stage.width]);
 
   return (
     <section className="mb-6 overflow-hidden rounded-2xl border border-white/10 bg-[#101520]">
@@ -804,7 +828,13 @@ function PreviewStage({ frameRef, unsaved, feedChanged, adminKey, onError }: { f
         <div className="flex items-center gap-2">
           <MonitorPlay className="size-4 text-[#ffb000]" />
           <h2 className="font-semibold">Live preview</h2>
-          <span className="text-xs text-slate-500">middle of a 1920 × 1080 stream</span>
+          <div className="ml-1 flex rounded-lg border border-white/10 bg-black/30 p-0.5 text-xs" role="group" aria-label="Stream shape">
+            {(Object.keys(STAGES) as StageShape[]).map((key) => (
+              <button key={key} type="button" aria-pressed={shape === key} onClick={() => chooseShape(key)} className={`rounded-md px-2 py-1 font-medium ${shape === key ? 'bg-white/15 text-white' : 'text-slate-500 hover:text-slate-300'}`}>
+                {STAGES[key].label.replace(' x ', ' × ')}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {unsaved ? (
@@ -824,17 +854,19 @@ function PreviewStage({ frameRef, unsaved, feedChanged, adminKey, onError }: { f
           </Button>
         </div>
       </div>
-      <div ref={boxRef} className="relative w-full overflow-hidden bg-[radial-gradient(circle_at_35%_25%,#26364c,#0b1018_65%)]" style={{ aspectRatio: `${STAGE_WIDTH} / ${VISIBLE_HEIGHT}` }}>
+      <div className="bg-black/40">
+      <div ref={boxRef} className={`relative mx-auto w-full overflow-hidden bg-[radial-gradient(circle_at_35%_25%,#26364c,#0b1018_65%)] ${shape === 'vertical' ? 'max-w-[720px]' : ''}`} style={{ aspectRatio: `${stage.width} / ${VISIBLE_HEIGHT}` }}>
         <div aria-hidden="true" className="absolute inset-0 bg-[linear-gradient(transparent_49.5%,rgb(255_255_255/4%)_50%,transparent_50.5%),linear-gradient(90deg,transparent_49.5%,rgb(255_255_255/4%)_50%,transparent_50.5%)]" />
         <iframe
           ref={frameRef}
           title="Ticker preview"
           src="/ticker?preview=1"
-          width={STAGE_WIDTH}
-          height={STAGE_HEIGHT}
+          width={stage.width}
+          height={stage.height}
           className="absolute left-0 top-0 origin-top-left border-0 bg-transparent"
-          style={{ transform: `translateY(${(-(STAGE_HEIGHT - VISIBLE_HEIGHT) / 2) * scale}px) scale(${scale})` }}
+          style={{ transform: `translateY(${(-(stage.height - VISIBLE_HEIGHT) / 2) * scale}px) scale(${scale})` }}
         />
+      </div>
       </div>
       <p className="px-5 py-3 text-xs text-slate-500">Preview never uses up your “front once” headlines — only the OBS source does.</p>
     </section>

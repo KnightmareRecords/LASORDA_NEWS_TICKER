@@ -146,7 +146,8 @@ button, input { font: inherit; }
 .ticker-shell { transition: opacity var(--fade-ms, 1400ms) ease-in-out; }
 .ticker-shell.is-hidden { opacity: 0; }
 .strip-layer { position: absolute; inset: 0 0 0 var(--slant); }
-.media-layer { position: fixed; inset: 0; }
+/* Uploaded banners: a 60px band centered where the bar is (exactly the OBS source when it is 60 tall). */
+.media-layer { position: fixed; left: 0; right: 0; top: 50%; height: min(60px, 100vh); transform: translateY(-50%); overflow: hidden; }
 .strip-layer.is-entering, .media-layer.is-entering { animation: layer-in var(--fade-ms, 1400ms) ease-in-out both; }
 .strip-layer.is-leaving, .media-layer.is-leaving { animation: layer-out var(--fade-ms, 1400ms) ease-in-out both; }
 
@@ -188,7 +189,8 @@ button, input { font: inherit; }
   text-transform: uppercase;
 }
 .promo-handle { margin: 0 .3em; color: var(--ticker-accent, #ffb000); text-transform: none; }
-.promo-media { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+/* Fills the source and trims the sides evenly if the file is wider (a 1920-wide banner in a 1080-wide source stays centered). */
+.promo-media { display: block; width: 100%; height: 100%; object-fit: cover; object-position: center; }
 
 @media (prefers-reduced-motion: reduce) {
   .ticker-track { animation-duration: calc(var(--ticker-duration, 140s) * 1.7); }
