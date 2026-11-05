@@ -21,6 +21,8 @@ const sceneKey = (scene: Scene) => `${scene.kind}-${scene.run}`;
 const FADE_MS = 700;
 const POLL_MS = 15_000;
 const SCORES_POLL_MS = 30_000;
+/** How often the ticker checks for the control panel's "Skip ahead" button. */
+const ADVANCE_POLL_MS = 3_000;
 /** A promo file that won't load is skipped, then retried after this long. */
 const PROMO_RETRY_MS = 5 * 60_000;
 const PROMO_LOAD_TIMEOUT_MS = 20_000;
@@ -279,6 +281,7 @@ export function Ticker() {
   const endPromo = useRef<(() => void) | null>(null);
   const skipSegment = useRef<(() => void) | null>(null);
   const forcedPromo = useRef<Promo | null>(null);
+  const manualSkip = useRef(false);
   const promoIndex = useRef(0);
 
   const pickPromo = useCallback((): Promo | null => {
@@ -332,8 +335,11 @@ export function Ticker() {
         if (cancelled) return;
         const next: Segment = current === 'news' ? (hasScores() ? 'scores' : 'news') : 'news';
         const promo = pickPromo();
-        // Nothing to switch to and no promo: keep the strip scrolling without a break.
-        if (!promo && next === current) continue;
+        // Nothing to switch to and no promo: keep the strip scrolling without a break
+        // (unless "Skip ahead" was pressed — then restart the strip so the press visibly does something).
+        const manual = manualSkip.current;
+        manualSkip.current = false;
+        if (!promo && next === current && !manual) continue;
         if (promo) {
           await crossfadeTo({ kind: 'promo', promo, run: (runId += 1) });
           if (cancelled) return;
@@ -353,6 +359,38 @@ export function Ticker() {
 
   // A promo whose file breaks while on air ends early (fades straight to the next segment).
   const promoFailed = useCallback(() => endPromo.current?.(), []);
+
+  // "Skip ahead" button on the control panel: end the current segment or promo now. The normal
+  // crossfade to whatever comes next follows. A press during a crossfade is ignored.
+  const advance = useCallback(() => {
+    if (skipSegment.current) {
+      manualSkip.current = true;
+      skipSegment.current();
+    } else {
+      endPromo.current?.();
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    let lastSeq: number | null = null;
+    const check = async () => {
+      try {
+        const response = await fetch('/api/advance', { cache: 'no-store' });
+        if (!response.ok) return;
+        const { seq } = (await response.json()) as { seq: number | null };
+        if (typeof seq !== 'number') return;
+        // The first answer is only the starting point, so reloading OBS never skips by itself.
+        if (lastSeq !== null && seq > lastSeq) advance();
+        lastSeq = seq;
+      } catch {
+        // missed one check; the next one catches up
+      }
+    };
+    void check();
+    const timer = window.setInterval(check, ADVANCE_POLL_MS);
+    return () => window.clearInterval(timer);
+  }, [ready, advance]);
 
   // Preview mode: the control panel streams unsaved settings in, asks for refreshes, and can show a promo now.
   useEffect(() => {

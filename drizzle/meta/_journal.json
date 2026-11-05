@@ -50,6 +50,13 @@
       "when": 1793867471792,
       "tag": "0006_promos",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1793869510794,
+      "tag": "0007_skip_ahead",
+      "breakpoints": true
     }
   ]
 }

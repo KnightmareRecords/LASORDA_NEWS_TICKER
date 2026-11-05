@@ -1,0 +1,1 @@
+ALTER TABLE `ticker_settings` ADD `advance_seq` integer DEFAULT 0 NOT NULL;

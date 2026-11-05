@@ -1,7 +1,7 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { ArrowDown, ArrowUp, Check, Copy, Download, ExternalLink, Eye, Image as ImageIcon, Megaphone, MonitorPlay, Palette, Plus, Radio, RefreshCw, Repeat, Sparkles, Trash2, Trophy, Upload, Zap } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Copy, Download, ExternalLink, Eye, Image as ImageIcon, Megaphone, MonitorPlay, Palette, Plus, Radio, RefreshCw, Repeat, SkipForward, Sparkles, Trash2, Trophy, Upload, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -462,6 +462,8 @@ export function ControlPanel() {
 
         <PreviewStage
           frameRef={previewRef}
+          adminKey={adminKey}
+          onError={setError}
           unsaved={JSON.stringify(settings) !== JSON.stringify(savedSettings)}
           feedChanged={settings.feedUrl !== savedSettings.feedUrl || settings.feedLabel !== savedSettings.feedLabel}
         />
@@ -607,7 +609,7 @@ export function ControlPanel() {
                   <Select value={String(settings.segmentSeconds)} onValueChange={(value) => setSettings((current) => ({ ...current, segmentSeconds: Number(value || 180) }))}>
                     <SelectTrigger className="mt-2 h-10 w-full border-white/10 bg-white/5 text-white"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {[60, 120, 180, 240, 300, 420, 600].map((seconds) => <SelectItem key={seconds} value={String(seconds)}>{seconds / 60} min</SelectItem>)}
+                      {[30, 60, 120, 180, 240, 300, 420, 600].map((seconds) => <SelectItem key={seconds} value={String(seconds)}>{seconds < 60 ? `${seconds} sec` : `${seconds / 60} min`}</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </label>
@@ -768,9 +770,24 @@ const STAGE_HEIGHT = 1080;
 // Show only the middle band of the 1080p frame (where the ticker lives) so the preview stays compact.
 const VISIBLE_HEIGHT = 360;
 
-function PreviewStage({ frameRef, unsaved, feedChanged }: { frameRef: RefObject<HTMLIFrameElement | null>; unsaved: boolean; feedChanged: boolean }) {
+function PreviewStage({ frameRef, unsaved, feedChanged, adminKey, onError }: { frameRef: RefObject<HTMLIFrameElement | null>; unsaved: boolean; feedChanged: boolean; adminKey: string; onError: (message: string) => void }) {
   const boxRef = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.5);
+  const [skip, setSkip] = useState<'idle' | 'sending' | 'sent'>('idle');
+
+  // "Skip ahead": OBS (and this preview) check every 3 seconds and crossfade to the next part.
+  async function skipAhead() {
+    setSkip('sending');
+    try {
+      const response = await fetch('/api/advance', { method: 'POST', headers: { 'X-Admin-Key': adminKey } });
+      if (!response.ok) throw new Error(await errorFrom(response, 'Skip ahead did not go through.'));
+      setSkip('sent');
+      window.setTimeout(() => setSkip('idle'), 3500);
+    } catch (err) {
+      setSkip('idle');
+      onError(err instanceof Error ? err.message : 'Skip ahead did not go through.');
+    }
+  }
 
   useEffect(() => {
     const box = boxRef.current;
@@ -796,6 +813,15 @@ function PreviewStage({ frameRef, unsaved, feedChanged }: { frameRef: RefObject<
             <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 font-semibold text-emerald-300">Matches what OBS shows</span>
           )}
           {feedChanged && <span className="rounded-full bg-white/5 px-2.5 py-1 text-slate-400">New feed headlines load after saving</span>}
+          <Button
+            type="button"
+            disabled={!adminKey || skip === 'sending'}
+            title={adminKey ? 'End the current segment or promo and crossfade to the next one (on stream within 3 seconds)' : 'Enter your admin key first'}
+            onClick={skipAhead}
+            className="h-8 bg-[#ffb000] px-3 text-xs font-semibold text-black hover:bg-[#ffc13b]"
+          >
+            {skip === 'sent' ? <><Check /> Skipping — on stream within 3 sec</> : <><SkipForward /> Skip ahead</>}
+          </Button>
         </div>
       </div>
       <div ref={boxRef} className="relative w-full overflow-hidden bg-[radial-gradient(circle_at_35%_25%,#26364c,#0b1018_65%)]" style={{ aspectRatio: `${STAGE_WIDTH} / ${VISIBLE_HEIGHT}` }}>

@@ -32,6 +32,8 @@ export const tickerSettings = sqliteTable('ticker_settings', {
   promoSeconds: integer('promo_seconds').notNull().default(10),
   /** Show the game scores segment (skipped automatically when there are no games). */
   scoresEnabled: integer('scores_enabled', { mode: 'boolean' }).notNull().default(true),
+  /** Bumped by the control panel's "Skip ahead" button; tickers skip to the next part when it changes. */
+  advanceSeq: integer('advance_seq').notNull().default(0),
   updatedAt: integer('updated_at').notNull().default(0),
 });
 
