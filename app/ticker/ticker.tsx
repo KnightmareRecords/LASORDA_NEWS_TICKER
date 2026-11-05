@@ -18,7 +18,7 @@ type Leaving = { scene: Scene; duration: number };
 const isMediaPromo = (scene: Scene) => scene.kind === 'promo' && scene.promo.kind !== 'text' && Boolean(scene.promo.url);
 const sceneKey = (scene: Scene) => `${scene.kind}-${scene.run}`;
 
-const FADE_MS = 700;
+const FADE_MS = 1400;
 const POLL_MS = 15_000;
 const SCORES_POLL_MS = 30_000;
 /** How often the ticker checks for the control panel's "Skip ahead" button. */
