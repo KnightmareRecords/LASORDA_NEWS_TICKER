@@ -9,6 +9,8 @@ if ! npm run db:migrate:remote; then
   exit 1
 fi
 echo
+# File storage for uploaded promos (creates it the first time; "already exists" is fine).
+npx wrangler r2 bucket create lasorda-ticker-media >/dev/null 2>&1 < /dev/null
 echo "Publishing..."
 if npm run deploy; then
   echo

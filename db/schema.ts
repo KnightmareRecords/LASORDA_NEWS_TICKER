@@ -26,6 +26,12 @@ export const tickerSettings = sqliteTable('ticker_settings', {
   feedLabel: text('feed_label').notNull().default('SPORTS'),
   /** Rewrite feed stories into short ticker lines with Cloudflare Workers AI (1 = on). */
   aiSummaries: integer('ai_summaries', { mode: 'boolean' }).notNull().default(true),
+  /** Seconds each segment (news, scores) stays on before switching. */
+  segmentSeconds: integer('segment_seconds').notNull().default(180),
+  /** Seconds each promo shows between segments. */
+  promoSeconds: integer('promo_seconds').notNull().default(10),
+  /** Show the game scores segment (skipped automatically when there are no games). */
+  scoresEnabled: integer('scores_enabled', { mode: 'boolean' }).notNull().default(true),
   updatedAt: integer('updated_at').notNull().default(0),
 });
 
@@ -37,5 +43,19 @@ export const aiLines = sqliteTable('ai_lines', {
   line: text('line'),
   team: text('team'),
   reason: text('reason'),
+  createdAt: integer('created_at').notNull(),
+});
+
+/** Promos shown one at a time between the news and scores segments, in `position` order. */
+export const promos = sqliteTable('promos', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  kind: text('kind', { enum: ['text', 'image', 'video'] }).notNull(),
+  /** Text slide wording (kind 'text'), or a label for an uploaded file. */
+  text: text('text').notNull().default(''),
+  /** R2 object key of the uploaded file (image/video). */
+  mediaKey: text('media_key'),
+  mediaType: text('media_type'),
+  enabled: integer('enabled', { mode: 'boolean' }).notNull().default(true),
+  position: integer('position').notNull().default(0),
   createdAt: integer('created_at').notNull(),
 });

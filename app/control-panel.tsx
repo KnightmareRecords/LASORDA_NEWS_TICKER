@@ -1,12 +1,13 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { Check, Copy, Download, ExternalLink, MonitorPlay, Palette, Plus, Radio, RefreshCw, Sparkles, Trash2, Zap } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Copy, Download, ExternalLink, Eye, Image as ImageIcon, Megaphone, MonitorPlay, Palette, Plus, Radio, RefreshCw, Repeat, Sparkles, Trash2, Trophy, Upload, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
+import type { Promo } from '@/lib/promos';
 import { HOUSE_PANEL_KEY, panelColors, TEAMS, TEAMS_BY_KEY, type League } from '@/lib/teams';
 
 const TAG_SUGGESTIONS = ['BREAKING', 'DEVELOPING STORY', 'BREAK ALERT', 'NEW DROP', 'GIVEAWAY', 'FINAL'];
@@ -46,7 +47,12 @@ type TickerSettings = {
   feedUrl: string;
   feedLabel: string;
   aiSummaries: boolean;
+  segmentSeconds: number;
+  promoSeconds: number;
+  scoresEnabled: boolean;
 };
+
+type ScoresStatus = { live: number; final: number; upcoming: number; leaguesDown: string[] };
 
 type AiStats = { off?: boolean; available?: boolean; ok?: number; rejected?: number; waiting?: number; skipped?: number; error?: string | null };
 
@@ -65,6 +71,9 @@ const defaultSettings: TickerSettings = {
   feedUrl: 'https://www.espn.com/espn/rss/news',
   feedLabel: 'SPORTS',
   aiSummaries: true,
+  segmentSeconds: 180,
+  promoSeconds: 10,
+  scoresEnabled: true,
 };
 
 type ModelContext = {
@@ -102,6 +111,11 @@ export function ControlPanel() {
   const previewRef = useRef<HTMLIFrameElement>(null);
   const settingsRef = useRef(settings);
   const [installPrompt, setInstallPrompt] = useState<InstallPromptEvent | null>(null);
+  const [promos, setPromos] = useState<Promo[]>([]);
+  const [promoText, setPromoText] = useState('');
+  const [promoBusy, setPromoBusy] = useState(false);
+  const [scoresStatus, setScoresStatus] = useState<ScoresStatus | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const postToPreview = useCallback((message: object) => {
     previewRef.current?.contentWindow?.postMessage(message, window.location.origin);
@@ -125,6 +139,32 @@ export function ControlPanel() {
   const refreshPreview = useCallback(() => postToPreview({ type: 'ticker-preview:refresh' }), [postToPreview]);
 
   useEffect(() => void checkFeed(), [checkFeed]);
+
+  const checkScores = useCallback(async () => {
+    try {
+      const response = await fetch('/api/scores', { cache: 'no-store' });
+      const data = (await response.json()) as { games: { state: string }[]; leagues: { league: string; ok: boolean }[] };
+      setScoresStatus({
+        live: data.games.filter((game) => game.state === 'live').length,
+        final: data.games.filter((game) => game.state === 'final').length,
+        upcoming: data.games.filter((game) => game.state === 'upcoming').length,
+        leaguesDown: data.leagues.filter((league) => !league.ok).map((league) => league.league),
+      });
+    } catch {
+      setScoresStatus(null);
+    }
+  }, []);
+  useEffect(() => void checkScores(), [checkScores]);
+
+  const loadPromos = useCallback(async () => {
+    try {
+      const response = await fetch('/api/promos', { cache: 'no-store' });
+      if (response.ok) setPromos(await response.json());
+    } catch {
+      // list stays as is
+    }
+  }, []);
+  useEffect(() => void loadPromos(), [loadPromos]);
 
   const load = useCallback(async () => {
     try {
@@ -321,6 +361,71 @@ export function ControlPanel() {
     }
   }
 
+  async function promoRequest(run: () => Promise<Response>, fallback: string) {
+    setPromoBusy(true);
+    setError('');
+    try {
+      const response = await run();
+      if (!response.ok) throw new Error(await errorFrom(response, fallback));
+      await loadPromos();
+      refreshPreview();
+      return true;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : fallback);
+      await loadPromos();
+      return false;
+    } finally {
+      setPromoBusy(false);
+    }
+  }
+
+  async function addTextPromo(event: FormEvent) {
+    event.preventDefault();
+    const text = promoText.trim();
+    if (!text) return;
+    const ok = await promoRequest(() => fetch('/api/promos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+      body: JSON.stringify({ text }),
+    }), 'Could not add the promo.');
+    if (ok) setPromoText('');
+  }
+
+  async function uploadPromo(file: File) {
+    const form = new FormData();
+    form.append('file', file);
+    await promoRequest(() => fetch('/api/promos', { method: 'POST', headers: { 'X-Admin-Key': adminKey }, body: form }), 'The upload did not work.');
+    if (fileRef.current) fileRef.current.value = '';
+  }
+
+  async function togglePromo(promo: Promo, enabled: boolean) {
+    setPromos((current) => current.map((item) => (item.id === promo.id ? { ...item, enabled } : item)));
+    await promoRequest(() => fetch(`/api/promos/${promo.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+      body: JSON.stringify({ enabled }),
+    }), 'That change did not save.');
+  }
+
+  async function movePromo(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= promos.length) return;
+    const reordered = [...promos];
+    [reordered[index], reordered[target]] = [reordered[target], reordered[index]];
+    setPromos(reordered);
+    await promoRequest(() => fetch('/api/promos', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey },
+      body: JSON.stringify({ order: reordered.map((item) => item.id) }),
+    }), 'The new order did not save.');
+  }
+
+  async function deletePromo(promo: Promo) {
+    await promoRequest(() => fetch(`/api/promos/${promo.id}`, { method: 'DELETE', headers: { 'X-Admin-Key': adminKey } }), 'That promo could not be removed.');
+  }
+
+  const showPromoInPreview = (promo: Promo) => postToPreview({ type: 'ticker-preview:promo', promo });
+
   async function copyTickerUrl() {
     await navigator.clipboard.writeText(`${window.location.origin}/ticker`);
     setCopied(true);
@@ -436,9 +541,104 @@ export function ControlPanel() {
                 </article>
               ))}
             </div>
+
+            <div className="mt-10 border-t border-white/10 pt-7">
+              <div className="mb-1 flex items-center gap-2">
+                <Megaphone className="size-4 text-[#ffb000]" />
+                <h2 className="text-xl font-semibold">Promos</h2>
+              </div>
+              <p className="mb-5 text-sm text-slate-400">Shown one at a time, in this order, between the news and scores segments. Each fades in, stays {settings.promoSeconds} seconds, and fades out. A file that won’t load is skipped automatically.</p>
+
+              <form onSubmit={addTextPromo} className="rounded-xl border border-white/10 bg-black/20 p-4">
+                <label htmlFor="promo-text" className="mb-2 block text-sm font-medium text-slate-200">Text slide</label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input id="promo-text" value={promoText} maxLength={90} onChange={(event) => setPromoText(event.target.value)} placeholder="Example: FOLLOW US ON INSTAGRAM @lasordascardhouse" className="h-10 border-white/15 bg-white/5 text-white placeholder:text-slate-600" />
+                  <Button type="submit" disabled={promoBusy || !promoText.trim() || !adminKey} className="h-10 bg-[#ffb000] px-4 text-black hover:bg-[#ffc13b]"><Plus /> Add</Button>
+                </div>
+                <p className="mt-1.5 text-xs text-slate-500">Uses your colors and the team-panel font. Anything starting with @ shows in the accent color.</p>
+                <div className="mt-4 border-t border-white/10 pt-4">
+                  <span className="mb-2 block text-sm font-medium text-slate-200">Image, GIF or video</span>
+                  <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp,video/mp4,video/webm" className="hidden" onChange={(event) => { const file = event.target.files?.[0]; if (file) void uploadPromo(file); }} />
+                  <Button type="button" variant="outline" disabled={promoBusy || !adminKey} onClick={() => fileRef.current?.click()} className="h-10 border-white/15 bg-white/5 text-white hover:bg-white/10"><Upload /> {promoBusy ? 'Working…' : 'Upload file'}</Button>
+                  <p className="mt-1.5 text-xs text-slate-500">Make it 1920 × 60 so it fills the ticker. PNG, JPG, GIF, WebP, MP4 or WebM, up to 25 MB. Videos play muted.</p>
+                </div>
+              </form>
+
+              <div className="mt-4 space-y-2">
+                {promos.length === 0 ? (
+                  <div className="rounded-xl border border-dashed border-white/15 py-8 text-center text-sm text-slate-500">No promos yet. The ticker switches straight between news and scores.</div>
+                ) : promos.map((promo, index) => (
+                  <article key={promo.id} className={`flex items-center gap-2 rounded-xl border p-3 transition ${promo.enabled ? 'border-white/10 bg-white/[0.035]' : 'border-white/5 opacity-55'}`}>
+                    <Switch aria-label={`${promo.enabled ? 'Disable' : 'Enable'} promo`} checked={promo.enabled} onCheckedChange={(enabled) => togglePromo(promo, enabled)} />
+                    <span className="w-5 text-center font-mono text-xs text-slate-500">{index + 1}</span>
+                    <div className="min-w-0 flex-1">
+                      {promo.kind === 'text' ? (
+                        <p className="truncate text-sm font-semibold uppercase tracking-wide text-slate-100">{promo.text}</p>
+                      ) : (
+                        <div className="flex min-w-0 items-center gap-2">
+                          {promo.kind === 'video'
+                            ? <video src={promo.url ?? undefined} muted loop autoPlay playsInline className="h-8 max-w-[220px] rounded bg-black object-contain" />
+                            // oxlint-disable-next-line next/no-img-element
+                            : <img src={promo.url ?? undefined} alt="" className="h-8 max-w-[220px] rounded bg-black object-contain" />}
+                          <span className="flex min-w-0 items-center gap-1 truncate text-xs text-slate-400"><ImageIcon className="size-3 shrink-0" /> {promo.text || promo.kind}</span>
+                        </div>
+                      )}
+                    </div>
+                    <Button type="button" aria-label="Show in live preview" title="Show in live preview" size="icon-sm" variant="ghost" className="text-slate-400 hover:bg-white/10 hover:text-white" onClick={() => showPromoInPreview(promo)}><Eye /></Button>
+                    <Button type="button" aria-label="Move up" size="icon-sm" variant="ghost" disabled={index === 0 || promoBusy} className="text-slate-400 hover:bg-white/10 hover:text-white" onClick={() => movePromo(index, -1)}><ArrowUp /></Button>
+                    <Button type="button" aria-label="Move down" size="icon-sm" variant="ghost" disabled={index === promos.length - 1 || promoBusy} className="text-slate-400 hover:bg-white/10 hover:text-white" onClick={() => movePromo(index, 1)}><ArrowDown /></Button>
+                    <Button type="button" aria-label="Delete promo" size="icon-sm" variant="ghost" disabled={promoBusy} className="text-slate-500 hover:bg-red-400/10 hover:text-red-300" onClick={() => deletePromo(promo)}><Trash2 /></Button>
+                  </article>
+                ))}
+              </div>
+            </div>
           </div>
 
           <aside className="space-y-6">
+            <section className="rounded-2xl border border-white/10 bg-[#101520] p-5">
+              <div className="mb-5 flex items-center gap-2">
+                <Repeat className="size-4 text-[#ffb000]" />
+                <h2 className="font-semibold">Rotation</h2>
+              </div>
+              <p className="text-xs leading-5 text-slate-500">News → promo → scores → next promo → news … Your custom headlines appear only in the news segment.</p>
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <label className="text-xs font-medium text-slate-400">
+                  Each segment
+                  <Select value={String(settings.segmentSeconds)} onValueChange={(value) => setSettings((current) => ({ ...current, segmentSeconds: Number(value || 180) }))}>
+                    <SelectTrigger className="mt-2 h-10 w-full border-white/10 bg-white/5 text-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[60, 120, 180, 240, 300, 420, 600].map((seconds) => <SelectItem key={seconds} value={String(seconds)}>{seconds / 60} min</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </label>
+                <label className="text-xs font-medium text-slate-400">
+                  Each promo
+                  <Select value={String(settings.promoSeconds)} onValueChange={(value) => setSettings((current) => ({ ...current, promoSeconds: Number(value || 10) }))}>
+                    <SelectTrigger className="mt-2 h-10 w-full border-white/10 bg-white/5 text-white"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {[5, 8, 10, 12, 15, 20, 30].map((seconds) => <SelectItem key={seconds} value={String(seconds)}>{seconds} sec</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </label>
+              </div>
+              <div className="mt-4 rounded-lg border border-white/10 bg-black/20 p-3">
+                <label className="flex cursor-pointer items-center justify-between gap-3 text-sm font-medium text-slate-200">
+                  <span className="flex items-center gap-2"><Trophy className="size-4 text-[#ffb000]" /> Game scores</span>
+                  <Switch checked={settings.scoresEnabled} onCheckedChange={(checked) => setSettings((current) => ({ ...current, scoresEnabled: checked }))} />
+                </label>
+                <p className="mt-1.5 text-xs leading-5 text-slate-500">NFL, NBA, MLB, NHL, college football and basketball from ESPN: live games first, then today’s finals and upcoming start times (college: ranked teams, plus all live games). With no games, this segment is skipped.</p>
+                {settings.scoresEnabled && scoresStatus && (
+                  <p className="mt-2 text-xs leading-5 text-slate-300">
+                    Right now: {scoresStatus.live} live · {scoresStatus.final} final · {scoresStatus.upcoming} upcoming
+                    {scoresStatus.leaguesDown.length > 0 && <span className="text-slate-500"> · not loading: {scoresStatus.leaguesDown.join(', ')} (skipped quietly)</span>}
+                  </p>
+                )}
+              </div>
+              <Button disabled={!adminKey || appearanceSaving} onClick={saveAppearance} className="mt-4 h-10 w-full bg-[#ffb000] text-black hover:bg-[#ffc13b]">
+                {appearanceSaving ? 'Saving…' : 'Save rotation'}
+              </Button>
+            </section>
+
             <section className="rounded-2xl border border-white/10 bg-[#101520] p-5">
               <div className="mb-5 flex items-center gap-2">
                 <Radio className="size-4 text-[#ffb000]" />

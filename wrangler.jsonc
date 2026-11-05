@@ -20,5 +20,12 @@
 			"database_id": "e7bc5cc0-4b7f-4a50-b651-1e9171e6ed8a",
 			"migrations_dir": "drizzle"
 		}
+	],
+	// Uploaded promo images/videos. Free tier 10 GB. Needs R2 turned on in the Cloudflare dashboard once.
+	"r2_buckets": [
+		{
+			"binding": "MEDIA",
+			"bucket_name": "lasorda-ticker-media"
+		}
 	]
 }

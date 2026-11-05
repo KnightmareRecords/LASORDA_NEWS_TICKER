@@ -43,6 +43,13 @@
       "when": 1793788776020,
       "tag": "0005_ai_lines",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793867471792,
+      "tag": "0006_promos",
+      "breakpoints": true
     }
   ]
 }

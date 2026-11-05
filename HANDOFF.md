@@ -13,6 +13,9 @@ his **eBay Live** card-break streams.
 - **Code:** https://github.com/KnightmareRecords/LASORDA_NEWS_TICKER (private, `main`)
 - **Hosting:** Jay's own Cloudflare account, free plan (Workers + D1 + Workers AI)
 
+> **Outdated (2026-11-05):** the two commits below were deployed long ago. The current state is in
+> `CLAUDE.md` → "Status" and "Change log". The preferences section below is still valid.
+
 ## Current state — 2026-11-04
 
 **Live on Cloudflare:** commit `45f02e4` (deployed 10:20 PT).

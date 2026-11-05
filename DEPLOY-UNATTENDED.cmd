@@ -6,6 +6,7 @@ echo Deploy started %date% %time% > deploy-log.txt
 call npx wrangler whoami >> deploy-log.txt 2>&1 < nul
 call npm run db:migrate:remote >> deploy-log.txt 2>&1 < nul
 if errorlevel 1 (echo DEPLOY FAILED at database step >> deploy-log.txt & exit /b 1)
+call npx wrangler r2 bucket create lasorda-ticker-media >> deploy-log.txt 2>&1 < nul
 call npm run deploy >> deploy-log.txt 2>&1 < nul
 if errorlevel 1 (echo DEPLOY FAILED at publish step >> deploy-log.txt & exit /b 1)
 echo DEPLOY FINISHED %date% %time% >> deploy-log.txt
