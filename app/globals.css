@@ -139,12 +139,15 @@ button, input { font: inherit; }
 .ticker-item i { width: 5px; height: 5px; margin-left: 14px; border-radius: 50%; background: #607087; }
 .ticker-empty { display: flex; height: 100%; align-items: center; padding-left: 22px; font-size: calc(var(--ticker-size, 25px) * .7); font-weight: 700; letter-spacing: .08em; color: color-mix(in srgb, var(--ticker-text, #fff) 60%, transparent); }
 
-/* Crossfades between segments and promos: the new layer fades in while the old one fades out. */
-@keyframes layer-in { from { opacity: 0; } to { opacity: 1; } }
-@keyframes layer-out { from { opacity: 1; } to { opacity: 0; } }
+/* "Dip" transitions between segments and promos: the old layer fades all the way out in the first
+   half, the new one fades in during the second half (they only overlap near zero), so the two never
+   sit on top of each other. Total length = --fade-ms. */
+@keyframes layer-out { 0% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@keyframes layer-in { 0%, 45% { opacity: 0; } 100% { opacity: 1; } }
 .ticker-stage { position: fixed; inset: 0; }
-.ticker-shell { transition: opacity var(--fade-ms, 1400ms) ease-in-out; }
-.ticker-shell.is-hidden { opacity: 0; }
+/* The whole bar under a full-size banner: hides in the first half, comes back in the second half. */
+.ticker-shell { transition: opacity calc(var(--fade-ms, 1400ms) * .55) ease-in-out calc(var(--fade-ms, 1400ms) * .45); }
+.ticker-shell.is-hidden { opacity: 0; transition: opacity calc(var(--fade-ms, 1400ms) * .5) ease-in-out 0s; }
 .strip-layer { position: absolute; inset: 0 0 0 var(--slant); }
 /* Uploaded banners: a 60px band centered where the bar is (exactly the OBS source when it is 60 tall). */
 .media-layer { position: fixed; left: 0; right: 0; top: 50%; height: min(60px, 100vh); transform: translateY(-50%); overflow: hidden; }
