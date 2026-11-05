@@ -57,9 +57,9 @@ Explorer. No database migrations are pending (0000–0005 are all applied remote
 - **Look:** SportsCenter-style. Lasorda's Card House logo block on a light panel, team panels in
   team colors with the Anton font, optional red tags. The bar is **slim** (~42 px at text size 25)
   because the screen space on eBay Live is precious. The logo must never be distorted.
-- **Team logos:** Jay supplies the official logo files himself, as
-  `public/teams/<team key>.png` (names are listed in `public/teams/LOGO-FILE-NAMES.txt`). Don't
-  source or download official logos.
+- **Team logos:** all 124 are in `public/teams/<team key>.png`. On 2026-11-04 Jay asked Claude to
+  download them from the official league sites (see the CLAUDE.md change log for the sources).
+  Only replace them when Jay asks.
 - **Ordering:** team stories are spread evenly, and the strip **always opens with a team story**.
   "Put at the front once" custom headlines still go first.
 - **Non-news** (rankings, previews, analysis, questions) is filtered out.
