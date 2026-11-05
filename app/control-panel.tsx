@@ -7,12 +7,15 @@ import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
-import { panelColors, TEAMS, TEAMS_BY_KEY, type League } from '@/lib/teams';
+import { HOUSE_PANEL_KEY, panelColors, TEAMS, TEAMS_BY_KEY, type League } from '@/lib/teams';
 
 const TAG_SUGGESTIONS = ['BREAKING', 'DEVELOPING STORY', 'BREAK ALERT', 'NEW DROP', 'GIVEAWAY', 'FINAL'];
 const LEAGUES: League[] = ['NFL', 'NBA', 'MLB', 'NHL'];
 
 function TeamChip({ teamKey }: { teamKey: string | null }) {
+  if (teamKey === HOUSE_PANEL_KEY) {
+    return <span className="inline-flex items-center rounded bg-[#e9eef0] px-2 py-0.5 text-xs font-bold uppercase tracking-wide text-slate-900">Lasorda Logo</span>;
+  }
   const team = teamKey ? TEAMS_BY_KEY.get(teamKey) : undefined;
   if (!team) return null;
   const colors = panelColors(team);
@@ -384,6 +387,7 @@ export function ControlPanel() {
                   Team panel (optional)
                   <select id="headline-team" value={team} onChange={(event) => setTeam(event.target.value)} className="mt-1.5 h-10 w-full rounded-lg border border-white/15 bg-[#151b27] px-2 text-sm text-white">
                     <option value="">None — show LIVE</option>
+                    <option value={HOUSE_PANEL_KEY}>Lasorda Logo</option>
                     {LEAGUES.map((league) => (
                       <optgroup key={league} label={league}>
                         {TEAMS.filter((item) => item.league === league).map((item) => (

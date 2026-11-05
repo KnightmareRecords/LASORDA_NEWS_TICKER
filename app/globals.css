@@ -84,7 +84,7 @@ button, input { font: inherit; }
   position: relative;
   z-index: 2;
   /* Just wide enough for the logo (2.43:1) at 72% of the bar height, plus the slanted edge. */
-  --badge-w: calc(var(--bar-h) * 1.75 + var(--slant) + 20px);
+  --badge-w: calc(var(--bar-h) * 1.75 + var(--slant) + 28px);
   width: var(--badge-w);
   flex: 0 0 var(--badge-w);
   display: flex;
@@ -101,7 +101,8 @@ button, input { font: inherit; }
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 calc(var(--slant) + 2px) 0 6px;
+  /* Extra light space on the left so the logo never touches the screen edge. */
+  padding: 0 calc(var(--slant) + 2px) 0 14px;
   background: #e9eef0;
   clip-path: polygon(0 0, 100% 0, calc(100% - var(--slant)) 100%, 0 100%);
 }
@@ -128,6 +129,9 @@ button, input { font: inherit; }
   text-transform: uppercase;
   clip-path: polygon(.45em 0, 100% 0, calc(100% - .45em) 100%, 0 100%);
 }
+/* "Lasorda Logo" panel: the light-gray transparent logo straight on the dark strip, kept in proportion. */
+.ticker-house { display: inline-flex; align-items: center; height: 1.35em; }
+.ticker-house img { display: block; height: 100%; width: auto; object-fit: contain; }
 .ticker-team-logo { height: 1.05em; width: auto; max-width: 2.2em; margin-right: .4em; object-fit: contain; }
 .ticker-tag { border-radius: 3px; background: #d0002a; color: #fff; padding: .25em .5em; font-size: calc(var(--ticker-size, 25px) * .46); font-style: normal; font-weight: 800; letter-spacing: .12em; }
 .ticker-item i { width: 5px; height: 5px; margin-left: 14px; border-radius: 50%; background: #607087; }

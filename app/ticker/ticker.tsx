@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { panelColors, TEAMS_BY_KEY } from '@/lib/teams';
+import { HOUSE_PANEL_KEY, HOUSE_PANEL_LOGO, panelColors, TEAMS_BY_KEY } from '@/lib/teams';
 
 type Headline = { id: string; text: string; source: string; team?: string | null; tag?: string | null };
 
@@ -130,7 +130,12 @@ export function Ticker() {
     return (
       <span className="ticker-item" key={`${index}-${item.id}`}>
         {item.tag && <em className="ticker-tag">{item.tag}</em>}
-        {team ? (
+        {item.team === HOUSE_PANEL_KEY ? (
+          <b className="ticker-house">
+            {/* oxlint-disable-next-line next/no-img-element */}
+            <img src={HOUSE_PANEL_LOGO} alt="Lasorda's Card House" onError={(event) => event.currentTarget.remove()} />
+          </b>
+        ) : team ? (
           <b className="ticker-team" style={{ '--team-bg': colors?.background, '--team-fg': colors?.text } as CSSProperties}>
             {/* Team logos are files Jay adds to public/teams/<team key>.png; hidden if the file isn't there. */}
             {/* oxlint-disable-next-line next/no-img-element */}
