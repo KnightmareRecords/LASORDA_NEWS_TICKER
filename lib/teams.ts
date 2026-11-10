@@ -302,11 +302,24 @@ function cleanForMatching(text: string) {
   return text.replace(/Magic Johnson/g, '');
 }
 
-// A team named right after these words is the opponent ("out vs. Bills", "lifts Jets past Canadiens"),
-// not who the story is about, so it never becomes the panel. ("at"/"to" are not here: "at Eagles
-// facility", "traded to Ravens".)
-const OPPONENT_BEFORE = /(?:\bvs\.?|\bversus|\bagainst|\bover|\bpast|\bbeat(?:s|ing)?|\bdefeat(?:s|ed|ing)?)\s+(?:the\s+)?$/i;
-const isOpponentMention = (text: string, index: number) => OPPONENT_BEFORE.test(text.slice(Math.max(0, index - 16), index));
+// A team named right after these words is the opponent ("out vs. Bills", "lifts Jets past Canadiens",
+// "31-24 loss to Miami", "falling 31-24 at Miami"), not who the story is about, so it never becomes
+// the panel. Plain "at"/"to" are not here ("at Eagles facility", "traded to Ravens"): only after a
+// loss word.
+const OPPONENT_BEFORE = new RegExp(
+  String.raw`(?:\bvs\.?|\bversus|\bagainst|\bover|\bpast|\bbeat(?:s|ing)?|\bdefeat(?:s|ed|ing)?|\bupset(?:s|ting)?` +
+    String.raw`|\b(?:loss(?:es)?|los(?:e|es|t|ing)|f[ae]ll(?:s|ing)?|upset|beaten|routed|stunned|edged|shut out)(?:\s+\d+-\d+)?\s+(?:to|at|by))\s+(?:the\s+|No\.\s*\d+\s+)?$`,
+  'i',
+);
+const isOpponentMention = (text: string, index: number) => OPPONENT_BEFORE.test(text.slice(Math.max(0, index - 32), index));
+
+// A major school's name inside another school's name ("Miami (OH)", "Washington State", "Northern
+// Arizona", "Texas State") is a different school. Major schools with such names ("Ohio State",
+// "West Virginia") are matched first (longest first) and blanked out, so anything left is not ours.
+const OTHER_SCHOOL_AFTER = /^(?:\s+(?:State|Tech|Southern|A&M|Christian|International|Atlantic|Gulf Coast|Valley|Baptist|Wesleyan|RedHawks)\b|\s*\((?:OH|Ohio)\)|\s+of Ohio\b|-[A-Z])/;
+const OTHER_SCHOOL_BEFORE = /\b(?:North|South|East|West|Northern|Southern|Eastern|Western|Central|Middle)\s+$/;
+const isOtherSchool = (text: string, index: number, length: number) =>
+  OTHER_SCHOOL_AFTER.test(text.slice(index + length, index + length + 20)) || OTHER_SCHOOL_BEFORE.test(text.slice(Math.max(0, index - 12), index));
 
 /** Position of the first mention that isn't an opponent mention, or -1. */
 function firstMention(text: string, regex: RegExp) {
@@ -346,7 +359,7 @@ function findTeams(text: string, context: StoryContext = {}): { team: Team; inde
   if (context.college) {
     for (const { team, regex } of schoolMatchers) {
       masked = masked.replace(regex, (hit, offset: number) => {
-        if (!isOpponentMention(masked, offset)) add(team, offset);
+        if (!isOpponentMention(masked, offset) && !isOtherSchool(masked, offset, hit.length)) add(team, offset);
         return ' '.repeat(hit.length);
       });
     }

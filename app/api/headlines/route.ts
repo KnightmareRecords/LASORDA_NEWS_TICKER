@@ -1,5 +1,5 @@
 import { env } from 'cloudflare:workers';
-import { detectTeam, isCollegeLink, TEAMS_BY_KEY, type StoryContext } from '@/lib/teams';
+import { detectTeam, isCollegeLink, mentionsTeam, TEAMS_BY_KEY, type StoryContext } from '@/lib/teams';
 import { AI_PROMPT_VERSION, summarizeStory } from '@/lib/ai-summary';
 import { isCollegeSport, sportLabel } from '@/lib/sports';
 import { teamFromPlayers } from '@/lib/players';
@@ -194,6 +194,14 @@ let aiLastError: string | null = null;
  * assume you just read the headline ("It was the latest four-goal comeback in NHL history."), so the
  * summary alone often doesn't say who the story is about. The safety checks use this same text.
  */
+function aiTeamStillValid(teamKey: string, item: FeedItem) {
+  const team = TEAMS_BY_KEY.get(teamKey);
+  if (!team) return false;
+  // A college story never gets a pro panel (older cached AI answers could say NHL "Hurricanes" for Miami).
+  if (storyContext(item).college && team.league !== 'NCAA') return false;
+  return mentionsTeam(aiText(item), team, storyContext(item));
+}
+
 function aiText(item: FeedItem) {
   const title = item.title.trim();
   return title && !item.story.startsWith(title) ? `${title}. ${item.story}` : item.story;
@@ -329,7 +337,9 @@ export async function GET(request: Request) {
       // ("… at Eagles facility"), so the headline is the fallback.
       // College stories (ESPN college link) also match bare school names ("Miami star …" → UM).
       // A college story never gets a pro panel (older cached AI answers could say NHL "Hurricanes" for Miami).
-      team: (useAi && entry.team && !(storyContext(item).college && TEAMS_BY_KEY.get(entry.team)?.league !== 'NCAA') && entry.team) || detectTeam(item.story, storyContext(item))?.key || detectTeam(item.title, storyContext(item))?.key
+      // A saved AI team is re-checked with today's rules (older saved picks could be an opponent or
+      // "Miami (OH)" read as UM).
+      team: (useAi && entry.team && aiTeamStillValid(entry.team, item) && entry.team) || detectTeam(item.story, storyContext(item))?.key || detectTeam(item.title, storyContext(item))?.key
         // Last resort: the story names a player but no team ("Kyler Murray out vs. Bills" → Vikings).
         // Pro rosters only (lib/rosters.ts, built on Jay's PC when deploying): in-memory, no network.
         || (storyContext(item).college ? null : teamFromPlayers(`${item.title}. ${item.story}`))

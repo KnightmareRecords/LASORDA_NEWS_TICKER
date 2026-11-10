@@ -257,3 +257,26 @@ await test('a story naming only a player gets that player\'s team (last resort)'
   // The real generated roster loads and knows current players.
   assert.equal(teamFromPlayers('Kyler Murray out with hamstring injury'), 'nfl-min');
 });
+
+await test('UM only when the story is about Miami (Fla.): not Miami (OH), other schools or Miami as the opponent', () => {
+  const college = { college: true };
+  const key = (text, context = college) => detectTeam(text, context)?.key ?? null;
+  // Miami (Ohio) and other schools that contain a major school's name are different schools.
+  assert.equal(key('Miami (OH) RedHawks beat Ohio 27-20 to stay unbeaten in MAC play.'), null);
+  assert.equal(key('Miami (Ohio) quarterback Dequan Finn threw for 300 yards.'), null);
+  assert.equal(key('Washington State quarterback John Mateer threw three touchdowns.'), null);
+  assert.equal(key('Oregon State fired its coach on Sunday.'), null);
+  assert.equal(key('Texas State beat UTSA in overtime.'), null);
+  // Miami named as the team that won (loss to / falling at / upset) is the opponent.
+  assert.equal(key("USF's undefeated season ended with a 31-24 loss to Miami."), null);
+  assert.equal(key('Memphis suffered its first loss, falling 31-24 at Miami.'), null);
+  assert.equal(key('Northern Arizona upset Arizona 70-65.'), null);
+  // Real Miami stories and majors with longer names still match.
+  assert.equal(key("Miami star Malachi Toney has a high ankle sprain and will have surgery, sidelining the receiver for the game against Notre Dame."), 'ncaa-um');
+  assert.equal(key('Miami beat Florida State 28-14 behind Carson Beck.'), 'ncaa-um');
+  assert.equal(key('Ohio State quarterback Julian Sayin threw four touchdown passes.'), 'ncaa-osu');
+  assert.equal(key('West Virginia beat Kansas State 24-17.'), 'ncaa-wvu');
+  // Pro: Miami Dolphins stays Dolphins; the loss rule works there too.
+  assert.equal(key('The Miami Dolphins placed quarterback Malik Willis on injured reserve.', {}), 'nfl-mia');
+  assert.equal(key('Bills suffered a 24-10 loss to the Patriots.', {}), 'nfl-buf');
+});
