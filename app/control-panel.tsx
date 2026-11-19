@@ -882,14 +882,14 @@ function BreakControl({ adminKey, onError }: { adminKey: string; onError: (messa
             {!adminKey ? 'Enter your admin key (Custom headlines, below) to change it.' : state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved — on stream within 5 seconds.' : ''}
           </p>
           <p className="mt-3 text-xs leading-5 text-slate-500">
-            OBS: add a Browser source with <span className="font-mono text-slate-300">{origin || ''}/break</span>, size 300 × 100, and place it right under the ticker.
+            OBS: add a Browser source with <span className="font-mono text-slate-300">{origin || ''}/break</span>, size 300 × 50, and place it right under the ticker.
           </p>
         </div>
         <div className="w-[240px] shrink-0">
           <p className="mb-1.5 text-xs text-slate-500">Preview</p>
-          <div className="relative h-[100px] w-[240px] overflow-hidden rounded-lg bg-[radial-gradient(circle_at_35%_25%,#26364c,#0b1018_65%)]">
+          <div className="relative h-[60px] w-[240px] overflow-hidden rounded-lg bg-[radial-gradient(circle_at_35%_25%,#26364c,#0b1018_65%)]">
             {/* ?n= shows the chosen number right away, without waiting for the 5-second check. */}
-            <iframe key={number} title="Break tab preview" src={`/break?n=${number}`} width={300} height={100} className="absolute left-0 top-0 origin-top-left border-0" style={{ transform: 'scale(0.8)' }} />
+            <iframe key={number} title="Break tab preview" src={`/break?n=${number}`} width={300} height={50} className="absolute left-0 top-0 origin-top-left border-0" style={{ transform: 'scale(0.8)' }} />
           </div>
           {number === 0 && <p className="mt-1.5 text-xs text-slate-500">Blank: nothing shows.</p>}
         </div>

@@ -1,8 +1,8 @@
 'use client';
 
-// The "Break #" tab: a trapezoid that hangs under the ticker, "BREAK" over "ONE". Its own OBS
+// The "Break #" tab: a trapezoid that hangs under the ticker, "BREAK ONE" on one line. Its own OBS
 // browser source, so the ticker's size never changes. The tab fills whatever size the OBS source is
-// (designed for 300×100) and uses the ticker's colors. Blank (0) shows nothing.
+// (designed for 300×50) and uses the ticker's colors. Blank (0) shows nothing.
 // Live-stream rule: a failed request never shows anything new — the tab keeps what it had.
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
@@ -62,7 +62,7 @@ export function BreakTab() {
   return (
     <main className="break-stage" style={style} aria-live="polite">
       <div className={`break-tab${word ? ' is-on' : ''}`} aria-hidden={!word}>
-        {/* Trapezoid: see-through dark fill + accent outline on the sides and bottom (the top meets the ticker). */}
+        {/* Trapezoid: solid dark fill + glowing accent outline on the sides and bottom (the top meets the ticker). */}
         <svg className="break-tab-shape" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           <polygon points="0,0 100,0 86,100 14,100" className="break-tab-fill" />
           <polyline points="0.8,0 14.6,98.6 85.4,98.6 99.2,0" className="break-tab-edge" vectorEffect="non-scaling-stroke" />
