@@ -5,6 +5,8 @@ import { HOUSE_PANEL_KEY, HOUSE_PANEL_LOGO, panelColors, teamLabel, TEAMS_BY_KEY
 import type { ScoreItem, ScoreSide } from '@/lib/scores';
 import type { Promo } from '@/lib/promos';
 import { createJsonPoller, createSceneWaiter } from '@/lib/ticker-runtime';
+import { breakWord } from '@/lib/break-number';
+import { BreakTabGraphic } from '@/app/break/break-tab';
 
 // Live-stream rule for this file: nothing that breaks (feed, scores, a promo file, a render bug)
 // may ever show an error on stream. Each source keeps its last good copy, broken promos are
@@ -193,6 +195,9 @@ export function Ticker() {
   const scrollPositions = useRef<Record<Segment, number>>({ news: 0, scores: 0 });
   const poll = useRef(createJsonPoller());
   const scoresReceivedAt = useRef(0);
+  // "Break #" tab under the bar (control panel → Break number). `breakShown` keeps the last word while it fades out.
+  const [breakNumber, setBreakNumber] = useState(0);
+  const [breakShown, setBreakShown] = useState('');
 
   const isPreview = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('preview');
   const view: TickerSettings = previewOverride ? { ...settings, ...previewOverride } : settings;
@@ -421,7 +426,12 @@ export function Ticker() {
     let lastSeq: number | null = null;
     const check = async () => {
       try {
-        const { seq } = await poll.current<{ seq: number | null }>('/api/advance');
+        const { seq, breakNumber: nextBreak } = await poll.current<{ seq: number | null; breakNumber?: number | null }>('/api/advance');
+        // The same check carries the break number, so the tab costs no extra requests.
+        if (typeof nextBreak === 'number') {
+          setBreakNumber(nextBreak);
+          if (breakWord(nextBreak)) setBreakShown(breakWord(nextBreak));
+        }
         if (typeof seq !== 'number') return;
         // The first answer is only the starting point, so reloading OBS never skips by itself.
         if (lastSeq !== null && seq > lastSeq) advance();
@@ -547,6 +557,10 @@ export function Ticker() {
         <div className="ticker-window">{stripLayers}</div>
       </main>
       {mediaLayers}
+      {/* Break tab hangs under the bar. Needs the OBS source to be taller than the bar (1080 × 110). */}
+      <div className="ticker-break">
+        <BreakTabGraphic word={breakWord(breakNumber)} shown={breakShown} />
+      </div>
     </div>
   );
 }

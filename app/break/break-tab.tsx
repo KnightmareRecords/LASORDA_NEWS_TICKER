@@ -61,19 +61,29 @@ export function BreakTab() {
   const style = { '--tab-accent': colors.accentColor, '--tab-bg': colors.backgroundColor, '--tab-text': colors.textColor } as CSSProperties;
   return (
     <main className="break-stage" style={style} aria-live="polite">
-      <div className={`break-tab${word ? ' is-on' : ''}`} aria-hidden={!word}>
-        {/* Trapezoid: solid dark fill + glowing accent outline on the sides and bottom (the top meets the ticker). */}
-        <svg className="break-tab-shape" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          {/* Fill and outline share the same corners, and both start above the top edge, so the page
-              edge cuts them in one clean horizontal line where they meet the ticker (no notch or sliver). */}
-          <polygon points="-0.6,-10 100.6,-10 85.5,98 14.5,98" className="break-tab-fill" />
-          <polyline points="-0.6,-10 14.5,98 85.5,98 100.6,-10" className="break-tab-edge" vectorEffect="non-scaling-stroke" />
-        </svg>
-        <div className="break-tab-inner">
-          <span className="break-tab-label">Break</span>
-          <span className="break-tab-number">{shown}</span>
-        </div>
-      </div>
+      <BreakTabGraphic word={word} shown={shown} />
     </main>
+  );
+}
+
+/**
+ * The trapezoid itself, used by /break and inside the ticker (/ticker draws it under the bar).
+ * `word` empty = fade out; `shown` keeps the last word visible while it fades.
+ */
+export function BreakTabGraphic({ word, shown }: { word: string; shown: string }) {
+  return (
+    <div className={`break-tab${word ? ' is-on' : ''}`} aria-hidden={!word}>
+      {/* Trapezoid: solid dark fill + accent outline on the sides and bottom (the top meets the ticker). */}
+      <svg className="break-tab-shape" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        {/* Fill and outline share the same corners, and both start above the top edge, so the edge cuts
+            them in one clean horizontal line where they meet the ticker (no notch or sliver). */}
+        <polygon points="-0.6,-10 100.6,-10 85.5,98 14.5,98" className="break-tab-fill" />
+        <polyline points="-0.6,-10 14.5,98 85.5,98 100.6,-10" className="break-tab-edge" vectorEffect="non-scaling-stroke" />
+      </svg>
+      <div className="break-tab-inner">
+        <span className="break-tab-label">Break</span>
+        <span className="break-tab-number">{shown}</span>
+      </div>
+    </div>
   );
 }

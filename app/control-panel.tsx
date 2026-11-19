@@ -799,7 +799,7 @@ export function ControlPanel() {
               <h2 className="font-semibold">OBS setup</h2>
               <ol className="mt-4 space-y-3 text-sm leading-6 text-slate-400">
                 <li><span className="mr-2 font-mono text-[#ffb000]">01</span> Add a Browser Source to your scene.</li>
-                <li><span className="mr-2 font-mono text-[#ffb000]">02</span> Use the ticker URL and set the width to your canvas width (1080 for a vertical 1080 × 1920 stream, 1920 for horizontal) and the height to 60. The bar sits in the middle of the source, so drag the source wherever you want it on screen. A smaller text size makes it slimmer.</li>
+                <li><span className="mr-2 font-mono text-[#ffb000]">02</span> Use the ticker URL and set the width to your canvas width (1080 for a vertical 1080 × 1920 stream, 1920 for horizontal) and the height to 110. The bar sits at the top of the source and the break tab hangs under it; drag the source wherever you want it on screen. A smaller text size makes it slimmer.</li>
                 <li><span className="mr-2 font-mono text-[#ffb000]">03</span> Position it along the bottom edge.</li>
               </ol>
               <div className="mt-5 rounded-lg border border-emerald-400/15 bg-emerald-400/[0.06] px-3 py-2 text-xs leading-5 text-emerald-200/80">The overlay background is transparent. News headlines refresh every 15 minutes; your custom changes reach OBS within 15 seconds.</div>
@@ -823,6 +823,8 @@ const STAGES = {
 } as const;
 type StageShape = keyof typeof STAGES;
 const VISIBLE_HEIGHT = 360;
+/** OBS browser source height: the 60px bar plus the 50px break tab under it. */
+const TICKER_SOURCE_HEIGHT = 110;
 
 /** "Break #" tab under the ticker: one dropdown, saved the moment it changes (on stream within 5 s). */
 function BreakControl({ adminKey, onError }: { adminKey: string; onError: (message: string) => void }) {
@@ -882,7 +884,7 @@ function BreakControl({ adminKey, onError }: { adminKey: string; onError: (messa
             {!adminKey ? 'Enter your admin key (Custom headlines, below) to change it.' : state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved — on stream within 5 seconds.' : ''}
           </p>
           <p className="mt-3 text-xs leading-5 text-slate-500">
-            OBS: add a Browser source with <span className="font-mono text-slate-300">{origin || ''}/break</span>, size 300 × 50, and place it right under the ticker.
+            Shown by the ticker itself, under the bar. Your OBS ticker source needs to be 110 tall (1080 × 110) for it to show.
           </p>
         </div>
         <div className="w-[240px] shrink-0">
@@ -986,9 +988,10 @@ function PreviewStage({ frameRef, unsaved, feedChanged, adminKey, onError }: { f
           title="Ticker preview"
           src="/ticker?preview=1"
           width={stage.width}
-          height={stage.height}
+          height={TICKER_SOURCE_HEIGHT}
           className="absolute left-0 top-0 origin-top-left border-0 bg-transparent"
-          style={{ transform: `translateY(${(-(stage.height - VISIBLE_HEIGHT) / 2) * scale}px) scale(${scale})` }}
+          // Same size as the OBS source, placed in the middle of the stream frame.
+          style={{ transform: `translateY(${((VISIBLE_HEIGHT - TICKER_SOURCE_HEIGHT) / 2) * scale}px) scale(${scale})` }}
         />
       </div>
       </div>

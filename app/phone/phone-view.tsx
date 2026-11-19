@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from 'react';
 // to fit the screen, exactly like a phone viewer's player shrinks the stream.
 const FRAME_WIDTH = 1080;
 const FRAME_HEIGHT = 1920;
+/** OBS browser source height: 60px bar + 50px break tab. */
+const TICKER_SOURCE_HEIGHT = 110;
 
 export function PhoneView() {
   const boxRef = useRef<HTMLDivElement>(null);
@@ -36,9 +38,10 @@ export function PhoneView() {
             title="Ticker as it appears on stream"
             src="/ticker?preview=1"
             width={FRAME_WIDTH}
-            height={FRAME_HEIGHT}
+            height={TICKER_SOURCE_HEIGHT}
             className="absolute left-0 top-0 origin-top-left border-0 bg-transparent"
-            style={{ transform: `scale(${scale})` }}
+            // Same size as the OBS source (bar + break tab), in the middle of the stream frame.
+            style={{ transform: `translateY(${((FRAME_HEIGHT - TICKER_SOURCE_HEIGHT) / 2) * scale}px) scale(${scale})` }}
           />
         )}
       </div>

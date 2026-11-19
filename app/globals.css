@@ -70,10 +70,9 @@ button, input { font: inherit; }
   /* Bar height follows the text size setting: 25px text → ~42px bar. */
   --bar-h: calc(var(--ticker-size, 25px) * 1.68);
   --slant: calc(var(--bar-h) * .27);
-  /* Centered vertically in the browser source, so the bar starts mid-screen in OBS and is easy to move. */
+  /* Pinned to the top of the browser source; the break tab hangs below it (source 1080 × 110). */
   position: fixed;
-  inset: 0;
-  margin: auto 0;
+  top: 0; left: 0; right: 0;
   height: var(--bar-h);
   display: flex;
   overflow: hidden;
@@ -145,13 +144,20 @@ button, input { font: inherit; }
    sit on top of each other. Total length = --fade-ms. */
 @keyframes layer-out { 0% { opacity: 1; } 50%, 100% { opacity: 0; } }
 @keyframes layer-in { 0%, 45% { opacity: 0; } 100% { opacity: 1; } }
-.ticker-stage { position: fixed; inset: 0; }
+.ticker-stage {
+  position: fixed; inset: 0;
+  /* Shared sizes: the bar (also set on .ticker-shell) and the break tab under it (50px under a 60px bar). */
+  --bar-h: calc(var(--ticker-size, 25px) * 1.68);
+  --tab-h: calc(var(--bar-h) * .83);
+  --tab-accent: var(--ticker-accent, #ffb000); --tab-bg: var(--ticker-background, #0a0e16); --tab-text: var(--ticker-text, #fff);
+}
+.ticker-break { position: fixed; top: var(--bar-h); left: 50%; width: calc(var(--tab-h) * 6); height: var(--tab-h); transform: translateX(-50%); pointer-events: none; }
 /* The whole bar under a full-size banner: hides in the first half, comes back in the second half. */
 .ticker-shell { transition: opacity calc(var(--fade-ms, 1400ms) * .55) ease-in-out calc(var(--fade-ms, 1400ms) * .45); }
 .ticker-shell.is-hidden { opacity: 0; transition: opacity calc(var(--fade-ms, 1400ms) * .5) ease-in-out 0s; }
 .strip-layer { position: absolute; inset: 0 0 0 var(--slant); }
-/* Uploaded banners: a 60px band centered where the bar is (exactly the OBS source when it is 60 tall). */
-.media-layer { position: fixed; left: 0; right: 0; top: 50%; height: min(60px, 100vh); transform: translateY(-50%); overflow: hidden; }
+/* Uploaded banners: a 60px band centered on the bar (the bar is pinned to the top of the source). */
+.media-layer { position: fixed; left: 0; right: 0; top: calc(var(--bar-h) / 2); height: 60px; transform: translateY(-50%); overflow: hidden; }
 .strip-layer.is-entering, .media-layer.is-entering { animation: layer-in var(--fade-ms, 1400ms) ease-in-out both; }
 .strip-layer.is-leaving, .media-layer.is-leaving { animation: layer-out var(--fade-ms, 1400ms) ease-in-out both; }
 
@@ -202,8 +208,8 @@ button, input { font: inherit; }
 }
 
 /* ---------- "Break #" tab (/break): trapezoid under the ticker, "BREAK" over "ONE" ----------
-   Fills its own OBS browser source (designed for 300×50); sizes follow the source height (vh). */
-.break-stage { position: fixed; inset: 0; display: flex; justify-content: center; align-items: flex-start; background: transparent; overflow: hidden; }
+   Drawn under the bar by /ticker (--tab-h from the bar height), or alone by /break filling its source (300×50). */
+.break-stage { --tab-h: 100vh; position: fixed; inset: 0; display: flex; justify-content: center; align-items: flex-start; background: transparent; overflow: hidden; }
 .break-tab {
   position: relative;
   width: 100%; height: 100%;
@@ -223,11 +229,11 @@ button, input { font: inherit; }
   position: relative;
   width: 100%; height: 100%;
   display: flex; flex-direction: row; align-items: center; justify-content: center; gap: .32em;
-  padding-bottom: 4vh;
+  padding-bottom: calc(var(--tab-h, 100vh) * .04);
   font-family: 'Ticker Display', var(--font-geist-sans), Arial, sans-serif; text-transform: uppercase; line-height: .9;
 }
 /* "BREAK THREE" on one line, both words the same size; a subtle glow behind the lettering. */
-.break-tab-label, .break-tab-number { font-size: 56vh; letter-spacing: .08em; }
+.break-tab-label, .break-tab-number { font-size: calc(var(--tab-h, 100vh) * .56); letter-spacing: .08em; }
 .break-tab-label {
   color: var(--tab-accent, #ffb000);
   text-shadow: 0 0 6px color-mix(in srgb, var(--tab-accent, #ffb000) 80%, transparent), 0 0 16px color-mix(in srgb, var(--tab-accent, #ffb000) 45%, transparent);

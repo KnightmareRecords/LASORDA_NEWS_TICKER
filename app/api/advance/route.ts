@@ -5,13 +5,16 @@ export const dynamic = 'force-dynamic';
 
 const noStore = { 'Cache-Control': 'no-store' };
 
-/** Current "skip ahead" counter. Tickers poll this every few seconds and skip when it goes up. */
+/**
+ * Current "skip ahead" counter (tickers skip when it goes up) and the break number shown in the tab
+ * under the bar (0 = blank). Tickers poll this every few seconds, so the break tab costs no extra requests.
+ */
 export async function GET() {
   try {
-    const row = await env.DB.prepare('SELECT advance_seq AS seq FROM ticker_settings WHERE id = 1').first<{ seq: number }>();
-    return Response.json({ seq: row?.seq ?? 0 }, { headers: noStore });
+    const row = await env.DB.prepare('SELECT advance_seq AS seq, break_number AS breakNumber FROM ticker_settings WHERE id = 1').first<{ seq: number; breakNumber: number }>();
+    return Response.json({ seq: row?.seq ?? 0, breakNumber: row?.breakNumber ?? 0 }, { headers: noStore });
   } catch {
-    return Response.json({ seq: null }, { headers: noStore });
+    return Response.json({ seq: null, breakNumber: null }, { headers: noStore });
   }
 }
 
