@@ -64,8 +64,10 @@ export function BreakTab() {
       <div className={`break-tab${word ? ' is-on' : ''}`} aria-hidden={!word}>
         {/* Trapezoid: solid dark fill + glowing accent outline on the sides and bottom (the top meets the ticker). */}
         <svg className="break-tab-shape" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          <polygon points="0,0 100,0 86,100 14,100" className="break-tab-fill" />
-          <polyline points="0.8,0 14.6,98.6 85.4,98.6 99.2,0" className="break-tab-edge" vectorEffect="non-scaling-stroke" />
+          {/* Fill and outline share the same corners, and both start above the top edge, so the page
+              edge cuts them in one clean horizontal line where they meet the ticker (no notch or sliver). */}
+          <polygon points="-0.6,-10 100.6,-10 85.5,98 14.5,98" className="break-tab-fill" />
+          <polyline points="-0.6,-10 14.5,98 85.5,98 100.6,-10" className="break-tab-edge" vectorEffect="non-scaling-stroke" />
         </svg>
         <div className="break-tab-inner">
           <span className="break-tab-label">Break</span>
