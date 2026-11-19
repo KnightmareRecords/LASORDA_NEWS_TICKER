@@ -200,3 +200,26 @@ button, input { font: inherit; }
 @media (prefers-reduced-motion: reduce) {
   .ticker-track { animation-duration: calc(var(--ticker-duration, 140s) * 1.7); }
 }
+
+/* ---------- "Break #" tab (/break): trapezoid under the ticker, "BREAK" over "ONE" ----------
+   Fills its own OBS browser source (designed for 300×100); sizes follow the source height (vh). */
+.break-stage { position: fixed; inset: 0; display: flex; justify-content: center; align-items: flex-start; background: transparent; overflow: hidden; }
+.break-tab {
+  --cut: 14%;
+  width: 100%; height: 100%;
+  background: var(--tab-accent, #ffb000);
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--cut)) 100%, var(--cut) 100%);
+  padding: 0 4px 4px;
+  opacity: 0; transform: translateY(-12%);
+  transition: opacity .45s ease, transform .45s ease;
+}
+.break-tab.is-on { opacity: 1; transform: none; }
+.break-tab-inner {
+  width: 100%; height: 100%;
+  background: var(--tab-bg, #0a0e16);
+  clip-path: polygon(0 0, 100% 0, calc(100% - var(--cut)) 100%, var(--cut) 100%);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  font-family: 'Ticker Display', var(--font-geist-sans), Arial, sans-serif; text-transform: uppercase; line-height: 1;
+}
+.break-tab-label { color: var(--tab-accent, #ffb000); font-size: 24vh; letter-spacing: .22em; padding-left: .22em; }
+.break-tab-number { color: var(--tab-text, #fff); font-size: 50vh; letter-spacing: .04em; margin-top: 3vh; }

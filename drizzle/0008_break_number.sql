@@ -1,0 +1,1 @@
+ALTER TABLE `ticker_settings` ADD `break_number` integer DEFAULT 0 NOT NULL;

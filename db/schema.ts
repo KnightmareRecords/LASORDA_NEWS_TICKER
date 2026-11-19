@@ -34,6 +34,8 @@ export const tickerSettings = sqliteTable('ticker_settings', {
   scoresEnabled: integer('scores_enabled', { mode: 'boolean' }).notNull().default(true),
   /** Bumped by the control panel's "Skip ahead" button; tickers skip to the next part when it changes. */
   advanceSeq: integer('advance_seq').notNull().default(0),
+  /** Break number shown in the /break tab under the ticker (0 = blank, 1–10 = Break One…Ten). */
+  breakNumber: integer('break_number').notNull().default(0),
   updatedAt: integer('updated_at').notNull().default(0),
 });
 

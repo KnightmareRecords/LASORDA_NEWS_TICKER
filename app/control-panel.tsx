@@ -1,7 +1,8 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState, type RefObject } from 'react';
-import { ArrowDown, ArrowUp, Check, Copy, Download, ExternalLink, Eye, Image as ImageIcon, Megaphone, MonitorPlay, Palette, Plus, Radio, RefreshCw, Repeat, SkipForward, Smartphone, Sparkles, Trash2, Trophy, Upload, Zap } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, Copy, Download, ExternalLink, Eye, Hash, Image as ImageIcon, Megaphone, MonitorPlay, Palette, Plus, Radio, RefreshCw, Repeat, SkipForward, Smartphone, Sparkles, Trash2, Trophy, Upload, Zap } from 'lucide-react';
+import { BREAK_CHOICES } from '@/lib/break-number';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
@@ -488,6 +489,8 @@ export function ControlPanel() {
           feedChanged={settings.feedUrl !== savedSettings.feedUrl || settings.feedLabel !== savedSettings.feedLabel}
         />
 
+        <BreakControl adminKey={adminKey} onError={setError} />
+
         <section className="grid gap-6 lg:grid-cols-[minmax(0,1.4fr)_minmax(320px,0.6fr)]">
           <div className="rounded-2xl border border-white/10 bg-[#101520] p-5 shadow-2xl shadow-black/20 sm:p-7">
             <div className="mb-5 flex items-center justify-between">
@@ -820,6 +823,80 @@ const STAGES = {
 } as const;
 type StageShape = keyof typeof STAGES;
 const VISIBLE_HEIGHT = 360;
+
+/** "Break #" tab under the ticker: one dropdown, saved the moment it changes (on stream within 5 s). */
+function BreakControl({ adminKey, onError }: { adminKey: string; onError: (message: string) => void }) {
+  const [number, setNumber] = useState(0);
+  const [state, setState] = useState<'loading' | 'idle' | 'saving' | 'saved'>('loading');
+  const [origin, setOrigin] = useState('');
+
+  useEffect(() => {
+    setOrigin(window.location.origin);
+    fetch('/api/break', { cache: 'no-store' })
+      .then((response) => response.json() as Promise<{ number?: number | null }>)
+      .then((data) => { if (typeof data.number === 'number') setNumber(data.number); })
+      .catch(() => {})
+      .finally(() => setState('idle'));
+  }, []);
+
+  async function choose(next: number) {
+    const previous = number;
+    setNumber(next);
+    setState('saving');
+    try {
+      const response = await fetch('/api/break', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Admin-Key': adminKey }, body: JSON.stringify({ number: next }) });
+      if (!response.ok) throw new Error(await errorFrom(response, 'The break number was not saved.'));
+      setState('saved');
+      window.setTimeout(() => setState((current) => (current === 'saved' ? 'idle' : current)), 5500);
+    } catch (err) {
+      setNumber(previous);
+      setState('idle');
+      onError(err instanceof Error ? err.message : 'The break number was not saved.');
+    }
+  }
+
+  return (
+    <section className="mb-6 rounded-2xl border border-white/10 bg-[#101520] p-5 sm:p-7">
+      <div className="flex flex-wrap items-start justify-between gap-5">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <Hash className="size-4 text-[#ffb000]" />
+            <h2 className="text-xl font-semibold">Break number</h2>
+          </div>
+          <p className="mt-1 text-sm text-slate-400">The tab under the ticker. Changes reach the stream within 5 seconds.</p>
+          <label htmlFor="break-number" className="mt-4 block text-xs font-medium text-slate-400">
+            Show
+            <select
+              id="break-number"
+              value={number}
+              disabled={!adminKey || state === 'loading' || state === 'saving'}
+              onChange={(event) => void choose(Number(event.target.value))}
+              className="mt-1.5 block h-11 w-full max-w-xs rounded-lg border border-white/15 bg-[#151b27] px-2 text-base text-white disabled:opacity-60"
+            >
+              {BREAK_CHOICES.map((choice) => (
+                <option key={choice.number} value={choice.number}>{choice.label}</option>
+              ))}
+            </select>
+          </label>
+          <p className="mt-2 h-4 text-xs text-slate-500">
+            {!adminKey ? 'Enter your admin key (Custom headlines, below) to change it.' : state === 'saving' ? 'Saving…' : state === 'saved' ? 'Saved — on stream within 5 seconds.' : ''}
+          </p>
+          <p className="mt-3 text-xs leading-5 text-slate-500">
+            OBS: add a Browser source with <span className="font-mono text-slate-300">{origin || ''}/break</span>, size 300 × 100, and place it right under the ticker.
+          </p>
+        </div>
+        <div className="w-[240px] shrink-0">
+          <p className="mb-1.5 text-xs text-slate-500">Preview</p>
+          <div className="relative h-[100px] w-[240px] overflow-hidden rounded-lg bg-[radial-gradient(circle_at_35%_25%,#26364c,#0b1018_65%)]">
+            {/* ?n= shows the chosen number right away, without waiting for the 5-second check. */}
+            <iframe key={number} title="Break tab preview" src={`/break?n=${number}`} width={300} height={100} className="absolute left-0 top-0 origin-top-left border-0" style={{ transform: 'scale(0.8)' }} />
+          </div>
+          {number === 0 && <p className="mt-1.5 text-xs text-slate-500">Blank: nothing shows.</p>}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 function PreviewStage({ frameRef, unsaved, feedChanged, adminKey, onError }: { frameRef: RefObject<HTMLIFrameElement | null>; unsaved: boolean; feedChanged: boolean; adminKey: string; onError: (message: string) => void }) {
   const boxRef = useRef<HTMLDivElement>(null);
