@@ -205,21 +205,34 @@ button, input { font: inherit; }
    Fills its own OBS browser source (designed for 300×100); sizes follow the source height (vh). */
 .break-stage { position: fixed; inset: 0; display: flex; justify-content: center; align-items: flex-start; background: transparent; overflow: hidden; }
 .break-tab {
-  --cut: 14%;
+  position: relative;
   width: 100%; height: 100%;
-  background: var(--tab-accent, #ffb000);
-  clip-path: polygon(0 0, 100% 0, calc(100% - var(--cut)) 100%, var(--cut) 100%);
-  padding: 0 4px 4px;
   opacity: 0; transform: translateY(-12%);
   transition: opacity .45s ease, transform .45s ease;
 }
 .break-tab.is-on { opacity: 1; transform: none; }
-.break-tab-inner {
-  width: 100%; height: 100%;
-  background: var(--tab-bg, #0a0e16);
-  clip-path: polygon(0 0, 100% 0, calc(100% - var(--cut)) 100%, var(--cut) 100%);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  font-family: 'Ticker Display', var(--font-geist-sans), Arial, sans-serif; text-transform: uppercase; line-height: 1;
+.break-tab-shape { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+/* 50% see-through dark fill, so the stream shows faintly behind it. */
+.break-tab-fill { fill: color-mix(in srgb, var(--tab-bg, #0a0e16) 50%, transparent); }
+/* Accent outline with a soft glow. */
+.break-tab-edge {
+  fill: none; stroke: var(--tab-accent, #ffb000); stroke-width: 3px; stroke-linejoin: round;
+  filter: drop-shadow(0 0 3px var(--tab-accent, #ffb000)) drop-shadow(0 0 7px color-mix(in srgb, var(--tab-accent, #ffb000) 55%, transparent));
 }
-.break-tab-label { color: var(--tab-accent, #ffb000); font-size: 24vh; letter-spacing: .22em; padding-left: .22em; }
-.break-tab-number { color: var(--tab-text, #fff); font-size: 50vh; letter-spacing: .04em; margin-top: 3vh; }
+.break-tab-inner {
+  position: relative;
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4vh;
+  padding-bottom: 3vh;
+  font-family: 'Ticker Display', var(--font-geist-sans), Arial, sans-serif; text-transform: uppercase; line-height: .9;
+}
+/* Both lines the same height; a subtle glow behind the lettering. */
+.break-tab-label, .break-tab-number { font-size: 38vh; letter-spacing: .1em; padding-left: .1em; }
+.break-tab-label {
+  color: var(--tab-accent, #ffb000);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--tab-accent, #ffb000) 80%, transparent), 0 0 16px color-mix(in srgb, var(--tab-accent, #ffb000) 45%, transparent);
+}
+.break-tab-number {
+  color: var(--tab-text, #fff);
+  text-shadow: 0 0 6px color-mix(in srgb, var(--tab-text, #fff) 55%, transparent), 0 0 18px color-mix(in srgb, var(--tab-accent, #ffb000) 70%, transparent);
+}

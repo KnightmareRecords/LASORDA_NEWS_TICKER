@@ -62,6 +62,11 @@ export function BreakTab() {
   return (
     <main className="break-stage" style={style} aria-live="polite">
       <div className={`break-tab${word ? ' is-on' : ''}`} aria-hidden={!word}>
+        {/* Trapezoid: see-through dark fill + accent outline on the sides and bottom (the top meets the ticker). */}
+        <svg className="break-tab-shape" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          <polygon points="0,0 100,0 86,100 14,100" className="break-tab-fill" />
+          <polyline points="0.8,0 14.6,98.6 85.4,98.6 99.2,0" className="break-tab-edge" vectorEffect="non-scaling-stroke" />
+        </svg>
         <div className="break-tab-inner">
           <span className="break-tab-label">Break</span>
           <span className="break-tab-number">{shown}</span>
